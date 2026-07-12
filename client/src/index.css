@@ -1,0 +1,170 @@
+:root {
+  --primary: #2e5bff;
+  --primary-soft: #4a69ff;
+  --bg: #f2f5ff;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --good: #22c55e;
+  --medium: #a855f7;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --shadow: 0 8px 30px rgba(46, 91, 255, 0.12);
+}
+
+.dark {
+  --bg: #0b1220;
+  --surface: #111827;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #1f2937;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.page {
+  min-height: 100%;
+  padding: 20px 18px 96px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+.h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  font-weight: 600;
+  font-size: 1rem;
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-soft));
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(46, 91, 255, 0.35);
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-danger {
+  border: 2px solid var(--bad);
+  color: var(--bad);
+  background: transparent;
+  border-radius: 999px;
+  width: 72px;
+  height: 72px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(46, 91, 255, 0.08);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge.good {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--good);
+}
+.badge.medium {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--medium);
+}
+.badge.warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+.badge.bad {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--bad);
+}
