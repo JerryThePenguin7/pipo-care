@@ -5,6 +5,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import { readSessions, writeSessions } from "./db.js";
+import { analyzeSessions, DEFAULT_OPTIONS as ANALYSIS_DEFAULTS } from "./analysis.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -32,6 +33,23 @@ function validateSession(body) {
 app.get("/api/sessions", (_req, res) => {
   const sessions = readSessions().sort((a, b) => b.startedAt - a.startedAt);
   res.json(sessions);
+});
+
+/**
+ * Dry-eye risk read-out derived from stored session statistics.
+ * Optional `?days=` narrows or widens the analysis window (default 14).
+ */
+app.get("/api/analysis", (req, res) => {
+  const raw = req.query.days;
+  let windowDays = ANALYSIS_DEFAULTS.windowDays;
+  if (raw !== undefined) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1 || n > 365) {
+      return res.status(400).json({ error: "days must be a number between 1 and 365" });
+    }
+    windowDays = n;
+  }
+  res.json(analyzeSessions(readSessions(), { windowDays }));
 });
 
 app.get("/api/sessions/:id", (req, res) => {

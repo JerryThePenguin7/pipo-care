@@ -102,6 +102,57 @@ The dev server uses **HTTPS** and listens on **all interfaces** (`0.0.0.0`), por
 
 ---
 
+## AI dry-eye analysis (home screen)
+
+The home screen shows an automated dry-eye read-out built from the statistics Pipo Care already stores.
+It replaces the old 7-day session list.
+
+- **Engine:** `server/analysis.js` (pure functions, no I/O)
+- **API:** `GET /api/analysis` — optional `?days=` window, default **14** (1-365)
+- **UI:** `client/src/components/AiAnalysisCard.tsx`, rendered by `client/src/pages/Home.tsx`
+
+It returns a **0-100 risk index** (Low → Mild → Moderate → High), the signals that produced it, what to do
+about each one, and a confidence rating based on how much usable data you have. Nothing is hidden: every
+point of the score is attributed to a factor you can see on screen.
+
+### How the score is built
+
+| Factor | Weight | What it measures |
+|--------|--------|------------------|
+| Average blink rate | 34% | Duration-weighted mean blinks/min. ≥15 is healthy, <7 is the app's dryness threshold. |
+| Time in the dryness band | 22% | Share of monitored time spent under 7 (and under 10) blinks/min. |
+| Blink-free staring gaps | 18% | Longest stretch with no blink at all, plus how often gaps over 10 s occur. |
+| Repeat dryness alerts | 10% | Alerts *beyond the first* per 10 minutes of monitoring. |
+| Blink decay during sessions | 10% | Slope of blink rate across a session — the tear-film fatigue curve. |
+| Trend vs earlier sessions | 6% | Recent half of the window against the earlier half. |
+
+Factors that lack data (too few samples, sessions too short) are dropped and the remaining weights are
+re-normalised, so a short history still produces a usable — if low-confidence — score.
+
+### Three data quirks the rules work around
+
+1. `SamplePoint.bpm` counts blinks in the **trailing 60 s**, so samples before `t = 60 s` always read low.
+   Exposure and decay factors ignore them.
+2. `avgBlinksPerMin` is `blinkCount / elapsed minutes`, which is unbiased at any length — that is why it
+   drives the heaviest factor.
+3. Because of (1), nearly every session logs one dryness alert during its first minute. Only *excess*
+   alerts, on sessions of 90 s or more, count towards risk.
+
+Captures shorter than 15 s or with fewer than 3 samples are excluded as noise, and the card reports how
+many were skipped.
+
+### Testing the engine
+
+```bash
+npm test --prefix server
+```
+
+This is a **rule-based, explainable model**, not a trained classifier and not a diagnosis — the prototype
+does not have anywhere near enough data to fit one, and a user needs to see *why* a score moved. It flags
+risk indicators for a wellness prompt; only an eye-care professional can diagnose dry eye disease.
+
+---
+
 ## Where session data is saved
 
 Monitoring history is stored on disk at:
