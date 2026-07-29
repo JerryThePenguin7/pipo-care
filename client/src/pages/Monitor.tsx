@@ -21,7 +21,6 @@ export function Monitor() {
   const suppressUntilRef = useRef(0);
   const alertsRef = useRef(0);
 
-  const [streamReady, setStreamReady] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [rateUnit, setRateUnit] = useState<"min" | "hour">("min");
@@ -40,7 +39,6 @@ export function Monitor() {
     streamRef.current = null;
     const v = videoRef.current;
     if (v) v.srcObject = null;
-    setStreamReady(false);
   }, []);
 
   useEffect(() => () => stopStream(), [stopStream]);
@@ -67,7 +65,6 @@ export function Monitor() {
       if (!v) return;
       v.srcObject = stream;
       await v.play();
-      setStreamReady(true);
       setSessionStartedAt(Date.now());
       alertsRef.current = 0;
       lowSinceRef.current = null;
@@ -200,6 +197,8 @@ export function Monitor() {
         </div>
       )}
 
+      <div className="split">
+      <div>
       <section
         className="card"
         style={{
@@ -261,6 +260,7 @@ export function Monitor() {
           {tracker.error}
         </p>
       )}
+      </div>
 
       <section className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -351,6 +351,7 @@ export function Monitor() {
           </span>
         </div>
       </section>
+      </div>
     </div>
   );
 }

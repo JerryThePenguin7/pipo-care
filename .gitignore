@@ -19,6 +19,10 @@ npm-debug.log*
 .env.*
 !.env.example
 
+# Secrets and account data (never commit these)
+server/data/.session-secret
+server/data/users.json
+
 # Editor / OS
 .DS_Store
 Thumbs.db

@@ -51,6 +51,7 @@ export const FACTOR_WEIGHTS = {
   blinkRate: 34,
   lowRateExposure: 22,
   blinkFreeGaps: 18,
+  selfReported: 14,
   alertBurden: 10,
   withinSessionDecline: 10,
   betweenSessionTrend: 6,
@@ -375,6 +376,45 @@ function trendFactor(sessions) {
   };
 }
 
+/**
+ * Factor 7 — what the user told us during onboarding.
+ *
+ * The camera measures blink mechanics; it cannot feel grit, burning or blurred
+ * vision. Symptom burden is the half of dry eye only the user can report, so the
+ * onboarding scales carry real weight — but less than the measured blink rate, since
+ * self-reports drift and the objective signal is what changes day to day.
+ */
+function selfReportFactor(profile) {
+  const ob = profile?.onboarding;
+  const s = ob?.completed ? ob.scales : null;
+  if (!s) return { available: false };
+
+  const norm = (v) => (Number.isFinite(Number(v)) ? clamp01((Number(v) - 1) / 4) : null);
+  const dryness = norm(s.drynessDiscomfort);
+  const strain = norm(s.visionStrain);
+  const relief = norm(s.reliefUse);
+  if (dryness === null || strain === null || relief === null) return { available: false };
+
+  const symptom = 0.4 * dryness + 0.3 * strain + 0.3 * relief;
+  const exposure = norm(s.screenHours);
+  const score = clamp01(exposure === null ? symptom : 0.8 * symptom + 0.2 * exposure);
+  const outOfFive = round(1 + symptom * 4);
+
+  return {
+    available: true,
+    score,
+    symptomScore: outOfFive,
+    exposure01: exposure,
+    value: `${outOfFive}/5 reported discomfort`,
+    detail:
+      symptom < 0.25
+        ? "You reported little day-to-day eye discomfort when you set up your profile."
+        : symptom < 0.55
+          ? "You reported occasional dryness or strain during screen work."
+          : "You reported frequent dryness, strain or reaching for relief — symptoms the camera cannot see.",
+  };
+}
+
 /* ------------------------------------------------------------- narrative */
 
 function levelFor(riskScore) {
@@ -395,9 +435,22 @@ function summaryFor(levelKey, topFinding) {
   }
 }
 
-function recommendationsFor(levelKey, byKey) {
+function recommendationsFor(levelKey, byKey, profile) {
   const out = [];
   const risky = (key, at = 0.35) => byKey[key]?.available && byKey[key].score >= at;
+
+  /**
+   * Symptoms without a measurable blink problem is the most useful thing this model
+   * can tell someone: it points away from blink frequency and towards evaporative or
+   * tear-quality causes, which no amount of blinking practice will fix.
+   */
+  if (risky("selfReported", 0.5) && byKey.blinkRate?.available && byKey.blinkRate.score < 0.25) {
+    out.push({
+      title: "Symptoms without a blink problem",
+      detail:
+        "You report real discomfort but your measured blink rate is healthy. That points at evaporation or tear quality — dry air, air conditioning, a vent aimed at your face, contact lenses — rather than how often you blink. Worth raising with an optometrist.",
+    });
+  }
 
   if (levelKey === "high" || levelKey === "moderate") {
     out.push({
@@ -442,10 +495,19 @@ function recommendationsFor(levelKey, byKey) {
       detail: "Whatever you are doing works. Keep the 20-20-20 habit and stay hydrated, especially in air-conditioned rooms.",
     });
   }
-  out.push({
-    title: "Keep monitoring",
-    detail: "Two or three captures a week of at least two minutes each keep this analysis meaningful and let it spot trends early.",
-  });
+
+  // Tailored to the reason the user gave during onboarding.
+  if (profile?.onboarding?.primaryReason === "professional") {
+    out.push({
+      title: "Bring this to your appointment",
+      detail: "Open Insights before your next visit — the per-session charts and this score give a clinician something concrete to work from.",
+    });
+  } else {
+    out.push({
+      title: "Keep monitoring",
+      detail: "Two or three captures a week of at least two minutes each keep this analysis meaningful and let it spot trends early.",
+    });
+  }
 
   return out.slice(0, 4);
 }
@@ -456,7 +518,8 @@ function recommendationsFor(levelKey, byKey) {
  * Analyse stored sessions and return a dry-eye risk read-out.
  *
  * @param {Array} sessions Stored SessionRecord objects (any order).
- * @param {{windowDays?: number, fallbackSessionCount?: number, now?: number}} [options]
+ * @param {{windowDays?: number, fallbackSessionCount?: number, now?: number, profile?: object}} [options]
+ *   `profile` is the signed-in user record; its onboarding answers become one factor.
  */
 export function analyzeSessions(sessions, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
@@ -509,6 +572,7 @@ export function analyzeSessions(sessions, options = {}) {
     blinkRate: { label: "Average blink rate", ...blinkRateFactor(used) },
     lowRateExposure: { label: "Time in the dryness band", ...lowRateExposureFactor(used) },
     blinkFreeGaps: { label: "Blink-free staring gaps", ...blinkFreeGapFactor(used) },
+    selfReported: { label: "Symptoms you reported", ...selfReportFactor(options.profile) },
     alertBurden: { label: "Repeat dryness alerts", ...alertBurdenFactor(used) },
     withinSessionDecline: { label: "Blink decay during sessions", ...withinSessionDeclineFactor(used) },
     betweenSessionTrend: { label: "Trend vs earlier sessions", ...trendFactor(used) },
@@ -571,8 +635,11 @@ export function analyzeSessions(sessions, options = {}) {
       pctTimeBelow7: factors.lowRateExposure.available ? factors.lowRateExposure.pctBelow7 : null,
       longestBlinkFreeSec: factors.blinkFreeGaps.available ? factors.blinkFreeGaps.longestSec : null,
       trendPct: factors.betweenSessionTrend.available ? factors.betweenSessionTrend.changePct : null,
+      selfReportedSymptoms: factors.selfReported.available ? factors.selfReported.symptomScore : null,
     },
+    /** Lets the UI say whether the onboarding answers are part of this score. */
+    usesProfile: factors.selfReported.available,
     findings,
-    recommendations: recommendationsFor(level.key, factors),
+    recommendations: recommendationsFor(level.key, factors, options.profile),
   };
 }

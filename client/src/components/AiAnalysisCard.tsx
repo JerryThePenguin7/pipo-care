@@ -224,7 +224,7 @@ export function AiAnalysisCard() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+      <div className="stat-grid" style={{ marginBottom: 14 }}>
         <Stat label="Avg blink rate" value={m.avgBlinksPerMin != null ? `${m.avgBlinksPerMin}/min` : "—"} />
         <Stat
           label="Longest without blinking"
@@ -261,7 +261,7 @@ export function AiAnalysisCard() {
       <h3 style={{ fontSize: "0.8rem", letterSpacing: "0.06em", color: "var(--muted)", margin: "14px 0 8px" }}>
         WHAT TO DO
       </h3>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
+      <ul className="card-grid" style={{ listStyle: "none", margin: 0, padding: 0, gap: 8 }}>
         {analysis.recommendations.map((r) => (
           <li
             key={r.title}
@@ -285,6 +285,13 @@ export function AiAnalysisCard() {
           Charts →
         </Link>
       </div>
+      {analysis.usesProfile && (
+        <p className="sub" style={{ margin: "8px 0 0", fontSize: "0.75rem" }}>
+          Includes the setup answers from your profile
+          {m.selfReportedSymptoms != null ? ` (${m.selfReportedSymptoms}/5 reported discomfort)` : ""} ·{" "}
+          <Link to="/welcome?redo=1">update them</Link>
+        </p>
+      )}
       <p className="sub" style={{ margin: "8px 0 0", fontSize: "0.72rem" }}>
         {analysis.disclaimer} · Model {analysis.modelVersion}
       </p>

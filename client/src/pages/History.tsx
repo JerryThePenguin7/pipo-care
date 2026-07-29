@@ -88,7 +88,7 @@ export function History() {
           <h2 className="h1" style={{ fontSize: "0.85rem", letterSpacing: "0.06em", color: "var(--muted)", margin: "0 0 8px" }}>
             {g.title.toUpperCase()}
           </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="card-grid">
             {g.items.map((s) => {
               const dt = new Date(s.startedAt);
               const good = isOptimal(s.status);

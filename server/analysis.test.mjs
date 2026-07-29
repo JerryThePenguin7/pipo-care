@@ -161,6 +161,84 @@ test("confidence grows with session count and monitored minutes", () => {
   assert.ok(rich.confidence.score > thin.confidence.score);
 });
 
+/* ------------------------------------------- onboarding self-report factor */
+
+/** @param {{dryness: number, strain: number, relief: number, screens?: number, reason?: string}} a */
+function profile(a) {
+  return {
+    id: "u1",
+    displayName: "Tester",
+    onboarding: {
+      completed: true,
+      primaryReason: a.reason || "prevention",
+      scales: {
+        drynessDiscomfort: a.dryness,
+        visionStrain: a.strain,
+        reliefUse: a.relief,
+        screenHours: a.screens ?? 3,
+      },
+    },
+  };
+}
+
+test("without onboarding answers the self-report factor is simply absent", () => {
+  const sessions = [1, 3, 5].map((ago) => session({ bpm: 18, ago }));
+  const a = analyzeSessions(sessions, { now: NOW });
+  assert.equal(a.usesProfile, false);
+  assert.equal(a.findings.find((f) => f.key === "selfReported"), undefined);
+  assert.equal(a.metrics.selfReportedSymptoms, null);
+  // An unscored profile must not change the measured verdict.
+  const withEmpty = analyzeSessions(sessions, { now: NOW, profile: { id: "u1", onboarding: { completed: false } } });
+  assert.equal(withEmpty.riskScore, a.riskScore);
+});
+
+test("reported symptoms raise the score even when blink mechanics look fine", () => {
+  const sessions = [1, 3, 5].map((ago) => session({ bpm: 18, ago }));
+  const calm = analyzeSessions(sessions, { now: NOW, profile: profile({ dryness: 1, strain: 1, relief: 1 }) });
+  const suffering = analyzeSessions(sessions, { now: NOW, profile: profile({ dryness: 5, strain: 5, relief: 5, screens: 5 }) });
+
+  assert.equal(calm.usesProfile, true);
+  assert.equal(calm.findings.find((f) => f.key === "selfReported").severity, "good");
+  assert.equal(suffering.findings.find((f) => f.key === "selfReported").severity, "risk");
+  assert.ok(suffering.riskScore > calm.riskScore, `${suffering.riskScore} should exceed ${calm.riskScore}`);
+  assert.equal(suffering.metrics.selfReportedSymptoms, 5);
+});
+
+test("symptoms with a healthy blink rate produce the evaporative-cause advice", () => {
+  const sessions = [1, 3, 5].map((ago) => session({ bpm: 18, ago }));
+  const a = analyzeSessions(sessions, { now: NOW, profile: profile({ dryness: 5, strain: 4, relief: 5 }) });
+  assert.ok(a.recommendations.some((r) => /Symptoms without a blink problem/.test(r.title)));
+});
+
+test("self-report cannot outweigh the measured factors on its own", () => {
+  // Worst possible self-report over healthy measurements must stay below the "high" band.
+  const sessions = [1, 3, 5, 7].map((ago) => session({ bpm: 18, ago, alerts: 1 }));
+  const a = analyzeSessions(sessions, { now: NOW, profile: profile({ dryness: 5, strain: 5, relief: 5, screens: 5 }) });
+  assert.ok(a.riskScore < 40, `self-report alone should not reach moderate, got ${a.riskScore}`);
+  assert.ok(a.findings.find((f) => f.key === "selfReported").weight <= 15);
+});
+
+test("the stated reason tailors the closing recommendation", () => {
+  const sessions = [1, 3, 5].map((ago) => session({ bpm: 18, ago }));
+  const clinical = analyzeSessions(sessions, {
+    now: NOW,
+    profile: profile({ dryness: 2, strain: 2, relief: 1, reason: "professional" }),
+  });
+  const casual = analyzeSessions(sessions, {
+    now: NOW,
+    profile: profile({ dryness: 2, strain: 2, relief: 1, reason: "curiosity" }),
+  });
+  assert.ok(clinical.recommendations.some((r) => /Bring this to your appointment/.test(r.title)));
+  assert.ok(casual.recommendations.some((r) => /Keep monitoring/.test(r.title)));
+});
+
+test("partial or malformed onboarding answers are ignored rather than scored", () => {
+  const sessions = [1, 3, 5].map((ago) => session({ bpm: 18, ago }));
+  const partial = { id: "u1", onboarding: { completed: true, scales: { drynessDiscomfort: 4 } } };
+  const a = analyzeSessions(sessions, { now: NOW, profile: partial });
+  assert.equal(a.usesProfile, false);
+});
+
 test("factor weights are re-normalised when factors are unavailable", () => {
   // A single 20 s session: too short for exposure, alert, decline and trend factors.
   const short = session({ bpm: 18, minutes: 1, ago: 1 });

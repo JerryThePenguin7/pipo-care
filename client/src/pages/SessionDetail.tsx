@@ -75,7 +75,7 @@ export function SessionDetail() {
           <span className={"badge " + badgeClass(session.status)}>{statusLabel(session.status)}</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+        <div className="stat-grid" style={{ gap: 10, marginTop: 14 }}>
           {[
             ["Session ID", session.id],
             ["Total blinks", String(session.blinkCount)],
@@ -100,7 +100,7 @@ export function SessionDetail() {
         <h2 className="h1" style={{ fontSize: "1rem", margin: "0 0 8px" }}>
           Blink rate over time
         </h2>
-        <div style={{ width: "100%", height: 220 }}>
+        <div className="chart-box">
           <ResponsiveContainer>
             <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>

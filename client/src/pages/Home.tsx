@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AiAnalysisCard } from "../components/AiAnalysisCard";
+import { Avatar } from "../components/Avatar";
 import { Mascot } from "../components/Mascot";
+import { useAuth } from "../context/AuthContext";
 
 const GREETINGS = [
   "Have your eyes been great today?",
@@ -12,32 +14,40 @@ const GREETINGS = [
   "Your blink rate matters — let's watch it together.",
 ];
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || "there";
+}
+
 export function Home() {
+  const { user } = useAuth();
   const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
 
   return (
     <div className="page">
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div>
-          <h1 className="h1">Pipo Care</h1>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 className="h1">Hi {user ? firstName(user.displayName) : "there"}</h1>
           <p className="sub" style={{ margin: 0 }}>
             Eye comfort companion
           </p>
         </div>
-        <span style={{ fontSize: 22, opacity: 0.85 }} aria-hidden>
-          ⏱️
-        </span>
+        {/* Doubles as the account entry point on phones, where there is no sidebar. */}
+        <Link to="/settings" aria-label="Your profile and settings">
+          <Avatar src={user?.avatar} name={user?.displayName || "?"} size={40} ring />
+        </Link>
       </header>
 
-      <section className="card" style={{ padding: 20, marginBottom: 18, textAlign: "center" }}>
-        <p style={{ fontWeight: 600, margin: "0 0 8px", fontSize: "1.05rem" }}>{greeting}</p>
-        <Mascot />
-        <Link to="/monitor" className="btn-primary" style={{ textDecoration: "none" }}>
-          <span aria-hidden>▶</span> Start monitoring
-        </Link>
-      </section>
+      <div className="split">
+        <section className="card" style={{ padding: 20, textAlign: "center" }}>
+          <p style={{ fontWeight: 600, margin: "0 0 8px", fontSize: "1.05rem" }}>{greeting}</p>
+          <Mascot />
+          <Link to="/monitor" className="btn-primary" style={{ textDecoration: "none" }}>
+            <span aria-hidden>▶</span> Start monitoring
+          </Link>
+        </section>
 
-      <AiAnalysisCard />
+        <AiAnalysisCard />
+      </div>
     </div>
   );
 }
