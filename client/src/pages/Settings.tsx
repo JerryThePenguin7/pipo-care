@@ -1,12 +1,76 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Avatar } from "../components/Avatar";
+import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { fileToAvatarDataUrl } from "../lib/avatar";
+import { disableGoogleAutoSelect } from "../lib/googleIdentity";
 
 const NOTIF_KEY = "pipo-care-notifications";
 
 export function Settings() {
   const { dark, setDark } = useTheme();
+  const { user, patchProfile, signOut } = useAuth();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [notif, setNotif] = useState(false);
   const [notifHint, setNotifHint] = useState<string | null>(null);
+
+  /** Theme lives on the profile so it follows the account to another device. */
+  const toggleTheme = useCallback(async () => {
+    const next = !dark;
+    setDark(next); // optimistic — the profile sync confirms it
+    try {
+      await patchProfile({ theme: next ? "dark" : "light" });
+    } catch {
+      setDark(!next);
+    }
+  }, [dark, patchProfile, setDark]);
+
+  const startEditing = useCallback(() => {
+    setDraftName(user?.displayName || "");
+    setProfileError(null);
+    setEditing(true);
+  }, [user]);
+
+  const saveProfile = useCallback(async () => {
+    const name = draftName.trim();
+    if (!name) {
+      setProfileError("Please enter a name.");
+      return;
+    }
+    setSavingProfile(true);
+    setProfileError(null);
+    try {
+      await patchProfile({ displayName: name });
+      setEditing(false);
+    } catch {
+      setProfileError("Could not save. Please try again.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }, [draftName, patchProfile]);
+
+  const changeAvatar = useCallback(
+    async (file?: File) => {
+      if (!file) return;
+      setProfileError(null);
+      try {
+        await patchProfile({ avatar: await fileToAvatarDataUrl(file) });
+      } catch (e) {
+        setProfileError(e instanceof Error ? e.message : "That image could not be used.");
+      }
+    },
+    [patchProfile]
+  );
+
+  const handleSignOut = useCallback(async () => {
+    disableGoogleAutoSelect();
+    await signOut();
+  }, [signOut]);
 
   useEffect(() => {
     try {
@@ -50,33 +114,76 @@ export function Settings() {
       </header>
 
       <section className="card" style={{ padding: 16, marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, var(--primary), var(--primary-soft))",
-              color: "white",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-              fontSize: "1.2rem",
-            }}
-            aria-hidden
-          >
-            PC
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>Pipo Care user</div>
-            <div className="sub" style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
-              Local-only profile · sessions stored on this device’s server folder
+        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+          <Avatar src={user?.avatar} name={user?.displayName || "?"} size={56} />
+          <div style={{ minWidth: 0 }}>
+            {editing ? (
+              <input
+                className="input"
+                value={draftName}
+                maxLength={40}
+                autoFocus
+                onChange={(e) => setDraftName(e.target.value)}
+                aria-label="Display name"
+              />
+            ) : (
+              <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{user?.displayName || "Pipo Care user"}</div>
+            )}
+            <div
+              className="sub"
+              style={{ margin: "4px 0 0", fontSize: "0.85rem", overflowWrap: "anywhere" }}
+            >
+              {user?.email}
+              {user?.provider === "google" ? " · Google account" : " · local test account"}
             </div>
           </div>
         </div>
-        <button type="button" className="btn-ghost" style={{ marginTop: 12, width: "100%" }} disabled>
-          Edit profile (coming soon)
-        </button>
+
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files?.[0])} />
+
+        {profileError && (
+          <p role="alert" style={{ color: "var(--bad)", fontSize: "0.82rem", margin: "10px 0 0" }}>
+            {profileError}
+          </p>
+        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {editing ? (
+            <>
+              <button type="button" className="btn-ghost" onClick={saveProfile} disabled={savingProfile}>
+                {savingProfile ? "Saving…" : "Save name"}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setEditing(false)} disabled={savingProfile}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-ghost" onClick={startEditing}>
+              Edit name
+            </button>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => fileRef.current?.click()}>
+            Change photo
+          </button>
+          {user?.avatar && (
+            <button type="button" className="btn-ghost" onClick={() => patchProfile({ avatar: "" })}>
+              Remove photo
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="card" style={{ padding: 16, marginBottom: 14 }}>
+        <h2 className="h1" style={{ fontSize: "1rem", margin: "0 0 4px" }}>
+          Your answers
+        </h2>
+        <p className="sub" style={{ margin: "0 0 12px", fontSize: "0.85rem" }}>
+          The setup questions about your eyes are part of how the AI scores your dry-eye risk. Update them whenever
+          things change.
+        </p>
+        <Link to="/welcome?redo=1" className="btn-ghost" style={{ display: "inline-block" }}>
+          Review your answers
+        </Link>
       </section>
 
       <section className="card" style={{ padding: 8, marginBottom: 14 }}>
@@ -122,13 +229,13 @@ export function Settings() {
         )}
         <Row
           title="Dark mode"
-          subtitle="Reduce glare for evening screen sessions."
+          subtitle="Saved to your profile, so it follows you to any device."
           control={
             <button
               type="button"
               role="switch"
               aria-checked={dark}
-              onClick={() => setDark(!dark)}
+              onClick={toggleTheme}
               style={{
                 width: 52,
                 height: 30,
@@ -167,21 +274,29 @@ export function Settings() {
         <LinkRow title="About Pipo Care" subtitle="Version 1.0 · educational wellness companion, not a medical device." />
       </section>
 
-      <button
-        type="button"
-        className="btn-ghost"
-        style={{ width: "100%", borderColor: "var(--bad)", color: "var(--bad)", fontWeight: 700 }}
-        onClick={() => {
-          try {
-            localStorage.clear();
-          } catch {
-            /* ignore */
-          }
-          window.location.reload();
-        }}
-      >
-        Reset local preferences
-      </button>
+      <div style={{ display: "grid", gap: 10 }}>
+        <button type="button" className="btn-primary" onClick={handleSignOut}>
+          Sign out
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          style={{ width: "100%", borderColor: "var(--bad)", color: "var(--bad)", fontWeight: 700 }}
+          onClick={() => {
+            try {
+              localStorage.clear();
+            } catch {
+              /* ignore */
+            }
+            window.location.reload();
+          }}
+        >
+          Reset local preferences
+        </button>
+        <p className="sub" style={{ margin: 0, fontSize: "0.75rem" }}>
+          Resetting clears device preferences only — your account, profile and monitoring history stay on the server.
+        </p>
+      </div>
     </div>
   );
 }

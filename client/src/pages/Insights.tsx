@@ -82,7 +82,7 @@ export function Insights() {
         <p className="sub" style={{ margin: "0 0 8px", fontSize: "0.85rem" }}>
           Line chart highlights improvement or fatigue patterns across days.
         </p>
-        <div style={{ width: "100%", height: 260 }}>
+        <div className="chart-box tall">
           <ResponsiveContainer>
             <LineChart data={perSession} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -103,7 +103,7 @@ export function Insights() {
         <p className="sub" style={{ margin: "0 0 8px", fontSize: "0.85rem" }}>
           Each point is a 5-second snapshot. Useful to see how often you dip under safe blink cadence while staring at a display.
         </p>
-        <div style={{ width: "100%", height: 240 }}>
+        <div className="chart-box">
           <ResponsiveContainer>
             <LineChart data={combinedTimeline} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -127,7 +127,7 @@ export function Insights() {
         <h2 className="h1" style={{ fontSize: "1rem", margin: "0 0 8px" }}>
           Session distribution by comfort zone
         </h2>
-        <div style={{ width: "100%", height: 220 }}>
+        <div className="chart-box">
           <ResponsiveContainer>
             <BarChart data={distribution} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
