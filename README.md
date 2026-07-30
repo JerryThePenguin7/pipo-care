@@ -43,7 +43,8 @@ cookie. You need a free OAuth client ID before anyone can sign in.
    - **Authorised JavaScript origins** — add every address you will open the app from:
      - `http://localhost:3001` (production mode on this PC)
      - `https://localhost:5173` (developer mode)
-     - `https://192.168.x.x:5173` (your LAN IP, for phone testing)
+   - **A LAN IP such as `https://192.168.1.5:5173` will be rejected** — Google only accepts
+     `localhost` or a public-TLD hostname. See "Testing on a phone" below.
    - You do **not** need a redirect URI — this flow never leaves the page.
 4. Copy the **Client ID** (it ends in `.apps.googleusercontent.com`).
 5. Start the server with it set:
@@ -63,6 +64,56 @@ address and reload.
 | `SESSION_SECRET` | Key used to sign session cookies. Generated and saved to `server/data/.session-secret` when unset — **set it explicitly in production**, otherwise everyone is signed out whenever that file is lost. |
 | `PIPO_ALLOW_DEV_LOGIN` | Set to `1` to expose a local test account so you can click through the app without a Google project. Refused whenever `NODE_ENV=production`. Never enable it on a public deployment. |
 | `PORT` / `HOST` | Listen address (defaults `3001` / `0.0.0.0`). |
+
+### Testing on a phone (why the LAN IP does not work)
+
+Adding `https://192.168.1.5:5173` to the authorised origins fails with:
+
+> Invalid Origin: must end with a public top-level domain (such as .com or .org).
+
+That is a hard Google rule, not a bug: a JavaScript origin must be `http://localhost[:port]`
+or a **hostname under a real public TLD**. Bare IP addresses are never accepted, so a LAN IP can
+never host Google sign-in. Three ways around it.
+
+**Option 1 — a tunnel (recommended).** Gives you a public HTTPS hostname with a *valid*
+certificate, which fixes the origin problem and removes the phone certificate warning at the
+same time. Point it at the production server, so there is no dev-server or TLS juggling:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Then, with the app already running in production mode on 3001:
+
+```powershell
+cloudflared tunnel --url http://localhost:3001
+```
+
+It prints something like `https://random-words-1234.trycloudflare.com`. Add that exact origin to
+**Authorised JavaScript origins**, then open it on the phone — Google sign-in and the camera both
+work, no warnings. The catch: a free quick tunnel gets a **new hostname every restart**, so you
+re-add the origin each time. A named Cloudflare tunnel on a domain you own, or an ngrok reserved
+domain, gives you a stable hostname worth adding once.
+
+The server already handles being behind a tunnel: it marks the session cookie `Secure` when it
+sees `x-forwarded-proto: https`.
+
+**Option 2 — wildcard DNS onto your LAN IP.** `nip.io` resolves any embedded address, so
+`192-168-1-5.nip.io` points at `192.168.1.5` and *ends in a public TLD*, which satisfies Google.
+Add `https://192-168-1-5.nip.io:5173`, run `npm run dev`, and open that URL on the phone. No extra
+software, but the self-signed dev certificate does not match the hostname, so you still click
+through the warning — and some mobile resolvers refuse to return private IPs, in which case the
+name will not resolve at all.
+
+**Option 3 — skip Google on the phone.** For testing the camera and monitoring rather than
+sign-in, run with the local test account enabled and use the plain LAN URL:
+
+```powershell
+$env:PIPO_ALLOW_DEV_LOGIN="1"; npm run dev
+```
+
+Open `https://192.168.1.5:5173` on the phone, accept the certificate warning once, and use
+**Continue with the local test account**. Nothing touches Google, so the origin rule never applies.
 
 ### Trying it without a Google project
 
@@ -265,6 +316,8 @@ Delete `sessions.json` to reset history, or `users.json` to remove all accounts.
 | Camera does not work on phone | Use the **https://** “Network” URL from `npm run dev` (not `http://`). Trust the certificate warning once, then allow Camera. |
 | Eye tracking never starts | Check internet; wait for model download; try a different browser. |
 | Google button does not appear | `GOOGLE_CLIENT_ID` is unset, or the address you opened is missing from the client's **Authorised JavaScript origins**. Add it and reload. |
+| “Invalid Origin: must end with a public top-level domain” | You tried to authorise a LAN IP. Google never accepts bare IPs — use a tunnel or a `nip.io` hostname (see “Testing on a phone”). |
+| Google button is in the wrong language | It follows `hl=` in the GIS script URL (`client/src/lib/googleIdentity.ts`), pinned to `en`. Change or remove it to follow the device locale. |
 | “Google sign-in could not be verified” | The ID token was issued for a different client ID than the server is configured with. Check both ends match. |
 | Signed out unexpectedly | Sessions last 30 days. Deleting `server/data/.session-secret`, or restarting with a different `SESSION_SECRET`, invalidates every session. |
 | History looks empty after signing in | Only the *first* account on an install adopts pre-accounts sessions. Later accounts start empty — that is by design. |

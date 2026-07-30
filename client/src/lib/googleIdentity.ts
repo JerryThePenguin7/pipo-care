@@ -6,7 +6,12 @@
  * session is issued — nothing here is trusted on its own.
  */
 
-const SRC = "https://accounts.google.com/gsi/client";
+/**
+ * `hl=en` pins the button's wording to English. Without it Google localises the label
+ * to the device locale, which reads oddly inside an otherwise English-only UI. Change
+ * or drop the parameter when the app itself gets translated.
+ */
+const SRC = "https://accounts.google.com/gsi/client?hl=en";
 
 export type GoogleCredentialResponse = { credential?: string };
 

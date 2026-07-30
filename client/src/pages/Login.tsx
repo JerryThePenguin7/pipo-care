@@ -2,14 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { Mascot } from "../components/Mascot";
 import { loadGoogleIdentity } from "../lib/googleIdentity";
-
-const POINTS = [
-  ["👁️", "Counts your blinks in real time", "On-device vision — video frames never leave your computer or phone."],
-  ["💧", "Warns you before your eyes dry out", "A full-screen prompt when your blink rate drops below a safe cadence."],
-  ["✨", "Explains what your habits mean", "An AI read-out of your dry-eye risk, built from your own statistics."],
-];
 
 export function Login() {
   const { status, user, config, signIn, signInDev } = useAuth();
@@ -57,7 +50,7 @@ export function Login() {
           size: "large",
           text: "continue_with",
           shape: "pill",
-          width: 300,
+          width: 328,
           logo_alignment: "center",
         });
       })
@@ -92,88 +85,57 @@ export function Login() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-layout">
-        <section className="auth-pitch">
-          <h1 className="h1" style={{ fontSize: "2rem" }}>
-            Pipo Care
-          </h1>
-          <p className="sub" style={{ fontSize: "1rem", maxWidth: 420 }}>
-            Your eye comfort companion. Sign in to keep your monitoring history, trends and personal dry-eye
-            analysis in one place.
-          </p>
-          <ul className="auth-points">
-            {POINTS.map(([icon, title, detail]) => (
-              <li key={title}>
-                <span className="auth-point-icon" aria-hidden>
-                  {icon}
-                </span>
-                <div>
-                  <strong>{title}</strong>
-                  <p className="sub" style={{ margin: "2px 0 0", fontSize: "0.85rem" }}>
-                    {detail}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+      <main className="login-panel">
+        <h1 className="brand-mark">
+          <span className="brand-mark-accent">Pipo</span> Care
+        </h1>
+        <p className="login-title">Log in to Pipo Care</p>
 
-        <section className="card auth-card">
-          <div className="auth-mascot">
-            <Mascot />
+        {clientId ? (
+          <div className="auth-google" ref={buttonRef} aria-busy={busy} />
+        ) : (
+          <div className="auth-notice">
+            <strong>Google sign-in is not configured</strong>
+            <p style={{ margin: "6px 0 0", fontSize: "0.82rem" }}>
+              Create an OAuth 2.0 Web client in the Google Cloud console, add this origin to its authorised
+              JavaScript origins, then start the server with <code>GOOGLE_CLIENT_ID</code> set. The README has the
+              full walkthrough.
+            </p>
           </div>
-          <h2 className="h1" style={{ fontSize: "1.2rem", textAlign: "center" }}>
-            Welcome
-          </h2>
-          <p className="sub" style={{ textAlign: "center", marginBottom: 20 }}>
-            Sign in with Google to get started.
-          </p>
+        )}
 
-          {clientId ? (
-            <div className="auth-google" ref={buttonRef} aria-busy={busy} />
-          ) : (
-            <div className="auth-notice">
-              <strong>Google sign-in is not configured</strong>
-              <p className="sub" style={{ margin: "6px 0 0", fontSize: "0.82rem", color: "var(--text)" }}>
-                Create an OAuth 2.0 Web client in the Google Cloud console, add this origin to its authorised
-                JavaScript origins, then start the server with <code>GOOGLE_CLIENT_ID</code> set. The README has
-                the full walkthrough.
-              </p>
+        {busy && (
+          <p className="sub" style={{ margin: "14px 0 0" }}>
+            Signing you in…
+          </p>
+        )}
+
+        {error && (
+          <p role="alert" style={{ color: "var(--bad)", fontWeight: 600, fontSize: "0.85rem", margin: "14px 0 0" }}>
+            {error}
+          </p>
+        )}
+
+        {config?.devLoginEnabled && (
+          <>
+            <div className="auth-divider">
+              <span>or</span>
             </div>
-          )}
-
-          {busy && (
-            <p className="sub" style={{ textAlign: "center", marginTop: 14 }}>
-              Signing you in…
+            <button type="button" className="btn-ghost" style={{ width: "100%" }} onClick={devSignIn} disabled={busy}>
+              Continue with the local test account
+            </button>
+            <p className="sub" style={{ margin: "8px 0 0", fontSize: "0.75rem" }}>
+              Development only — this option is refused in production builds.
             </p>
-          )}
+          </>
+        )}
 
-          {error && (
-            <p role="alert" style={{ color: "var(--bad)", fontWeight: 600, fontSize: "0.85rem", marginTop: 14 }}>
-              {error}
-            </p>
-          )}
-
-          {config?.devLoginEnabled && (
-            <>
-              <div className="auth-divider">
-                <span>or</span>
-              </div>
-              <button type="button" className="btn-ghost" style={{ width: "100%" }} onClick={devSignIn} disabled={busy}>
-                Continue with the local test account
-              </button>
-              <p className="sub" style={{ margin: "8px 0 0", fontSize: "0.75rem", textAlign: "center" }}>
-                Development only — this option is refused in production builds.
-              </p>
-            </>
-          )}
-
-          <p className="sub" style={{ margin: "20px 0 0", fontSize: "0.72rem", textAlign: "center" }}>
-            Pipo Care is a wellness prototype, not a medical device. We store your name, email and profile photo
-            from Google — nothing else.
-          </p>
-        </section>
-      </div>
+        {/* No separate sign-up: continuing with Google creates the account on first use. */}
+        <p className="login-foot">
+          New here? Continuing with Google creates your account. Pipo Care is a wellness prototype, not a medical
+          device — we store your name, email and profile photo from Google, nothing else.
+        </p>
+      </main>
     </div>
   );
 }
