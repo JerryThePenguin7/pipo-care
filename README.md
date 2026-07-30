@@ -206,6 +206,30 @@ The dev server uses **HTTPS** and listens on **all interfaces** (`0.0.0.0`), por
 
 ---
 
+## Dryness alerts
+
+When your rolling blink rate stays under 7 blinks/minute for about 7 seconds, a full-screen
+alert opens. **Blinking clears it — there is no acknowledge button.** The alert counts your
+blinks live and closes itself after **5 complete blinks**, then stays quiet for 50 seconds.
+
+If Pipo Care is in a background tab it keeps nagging: the browser notification re-fires with a
+chime every 8 seconds, showing your progress (`2 of 5 done`), until the 5 blinks register.
+Clicking the notification brings the tab back. Both the notification and the chime have their own
+switches in Settings.
+
+Two things worth knowing:
+
+- **A dismiss link appears after 20 seconds.** Without it, anyone whose face has left the frame —
+  walked away, covered the camera, lost tracking — would be stuck behind an overlay that also
+  covers the Stop button.
+- **Blink counting degrades in a hidden tab.** Detection keeps running (it switches from
+  `requestAnimationFrame`, which browsers freeze in background tabs, to a timer), but browsers
+  clamp background timers to roughly 1 Hz — far below the ~30 Hz needed to catch a 100-400 ms
+  blink. So blinks may not register until you return to the tab, which is the safe failure mode:
+  the reminder keeps going rather than clearing early. Counting at full rate in the background
+  would mean reading frames off the `MediaStreamTrack` in a worker instead of from the `<video>`
+  element.
+
 ## AI dry-eye analysis (home screen)
 
 The home screen shows an automated dry-eye read-out built from the statistics Pipo Care already stores.

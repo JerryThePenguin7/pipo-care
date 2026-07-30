@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { fileToAvatarDataUrl } from "../lib/avatar";
 import { disableGoogleAutoSelect } from "../lib/googleIdentity";
+import { alertSoundEnabled, playAlertChime, setAlertSoundEnabled, unlockAlertSound } from "../lib/alertSound";
 
 const NOTIF_KEY = "pipo-care-notifications";
 
@@ -18,6 +19,20 @@ export function Settings() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [notif, setNotif] = useState(false);
   const [notifHint, setNotifHint] = useState<string | null>(null);
+  const [sound, setSound] = useState(true);
+
+  useEffect(() => setSound(alertSoundEnabled()), []);
+
+  /** Toggling on also previews the chime — and the click unlocks audio for later alerts. */
+  const toggleSound = useCallback(() => {
+    const next = !sound;
+    setSound(next);
+    setAlertSoundEnabled(next);
+    if (next) {
+      unlockAlertSound();
+      playAlertChime();
+    }
+  }, [sound]);
 
   /** Theme lives on the profile so it follows the account to another device. */
   const toggleTheme = useCallback(async () => {
@@ -189,38 +204,8 @@ export function Settings() {
       <section className="card" style={{ padding: 8, marginBottom: 14 }}>
         <Row
           title="Notifications"
-          subtitle="Optional browser alerts when dryness risk is detected."
-          control={
-            <button
-              type="button"
-              role="switch"
-              aria-checked={notif}
-              onClick={toggleNotif}
-              style={{
-                width: 52,
-                height: 30,
-                borderRadius: 999,
-                border: "1px solid var(--border)",
-                background: notif ? "var(--primary)" : "var(--bg)",
-                position: "relative",
-                cursor: "pointer",
-              }}
-            >
-              <span
-                style={{
-                  position: "absolute",
-                  top: 3,
-                  left: notif ? 26 : 4,
-                  width: 22,
-                  height: 22,
-                  borderRadius: "50%",
-                  background: "white",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                  transition: "left 0.15s ease",
-                }}
-              />
-            </button>
-          }
+          subtitle="Browser alerts when dryness is detected. They repeat until you have blinked 5 times."
+          control={<Switch checked={notif} onClick={toggleNotif} label="Notifications" />}
         />
         {notifHint && (
           <p style={{ color: "var(--warn)", fontSize: "0.85rem", margin: "0 12px 8px" }} role="status">
@@ -228,39 +213,14 @@ export function Settings() {
           </p>
         )}
         <Row
+          title="Alert sound"
+          subtitle="Chime with each dryness reminder while Pipo Care is in a background tab."
+          control={<Switch checked={sound} onClick={toggleSound} label="Alert sound" />}
+        />
+        <Row
           title="Dark mode"
           subtitle="Saved to your profile, so it follows you to any device."
-          control={
-            <button
-              type="button"
-              role="switch"
-              aria-checked={dark}
-              onClick={toggleTheme}
-              style={{
-                width: 52,
-                height: 30,
-                borderRadius: 999,
-                border: "1px solid var(--border)",
-                background: dark ? "var(--primary)" : "var(--bg)",
-                position: "relative",
-                cursor: "pointer",
-              }}
-            >
-              <span
-                style={{
-                  position: "absolute",
-                  top: 3,
-                  left: dark ? 26 : 4,
-                  width: 22,
-                  height: 22,
-                  borderRadius: "50%",
-                  background: "white",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                  transition: "left 0.15s ease",
-                }}
-              />
-            </button>
-          }
+          control={<Switch checked={dark} onClick={toggleTheme} label="Dark mode" />}
         />
       </section>
 
@@ -298,6 +258,42 @@ export function Settings() {
         </p>
       </div>
     </div>
+  );
+}
+
+function Switch({ checked, onClick, label }: { checked: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onClick}
+      style={{
+        width: 52,
+        height: 30,
+        borderRadius: 999,
+        border: "1px solid var(--border)",
+        background: checked ? "var(--primary)" : "var(--bg)",
+        position: "relative",
+        cursor: "pointer",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: checked ? 26 : 4,
+          width: 22,
+          height: 22,
+          borderRadius: "50%",
+          background: "white",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+          transition: "left 0.15s ease",
+        }}
+      />
+    </button>
   );
 }
 
