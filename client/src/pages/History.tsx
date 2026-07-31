@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchSessions } from "../api";
+import { fetchSessions } from "@data";
 import type { EyeStatus, SessionRecord } from "../types";
 import { statusLabel } from "../types";
 

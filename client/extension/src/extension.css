@@ -1,0 +1,170 @@
+/*
+ * Extension-only chrome on top of the shared design system.
+ *
+ * The side panel is ~320-500px wide and a full tab is ~1400px, so the navigation here is a
+ * width-agnostic tab strip rather than the web app's bottom-bar/sidebar pair. The shared
+ * .bottom-nav and .side-nav rules are switched off so a breakpoint can never surface a
+ * second navigation inside the panel.
+ */
+@import "../../src/index.css";
+
+.bottom-nav,
+.side-nav {
+  display: none !important;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.ext-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.ext-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.ext-mark {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.ext-mark-accent {
+  color: var(--primary);
+}
+
+.dark .ext-mark-accent {
+  color: var(--primary-soft);
+}
+
+.ext-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ext-tab-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Horizontal strip: scrolls rather than wrapping when the panel is narrow. */
+.ext-nav {
+  position: sticky;
+  top: 45px;
+  z-index: 29;
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ext-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.ext-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ext-nav-item svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ext-nav-item:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.ext-nav-item.active {
+  background: var(--tint);
+  color: var(--primary);
+}
+
+.ext-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* No fixed bottom bar here, so the shared page padding can come back down. */
+.ext-main .page {
+  padding: 16px 14px 28px;
+  max-width: 520px;
+}
+
+@media (min-width: 900px) {
+  .ext-main .page {
+    max-width: 900px;
+    padding: 24px 24px 40px;
+  }
+}
+
+.ext-greeting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ext-setup {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 18px 14px;
+  background: var(--bg);
+}
+
+.ext-setup .onboarding-card {
+  max-width: 520px;
+  padding: 20px 18px;
+}
+
+.ext-splash {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}

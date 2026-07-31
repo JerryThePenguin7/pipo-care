@@ -12,8 +12,8 @@ import {
   saveUser,
   writeSessions,
 } from "./db.js";
-import { analyzeSessions, DEFAULT_OPTIONS as ANALYSIS_DEFAULTS } from "./analysis.js";
-import { onboardingSchema, validateOnboarding } from "./onboarding.js";
+import { analyzeSessions, DEFAULT_OPTIONS as ANALYSIS_DEFAULTS } from "../shared/analysis.js";
+import { onboardingSchema, validateOnboarding } from "../shared/onboarding.js";
 import {
   clearSessionCookie,
   devLoginEnabled,

@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchSession } from "../api";
+import { fetchSession } from "@data";
 import type { SessionRecord } from "../types";
 import { statusLabel } from "../types";
 

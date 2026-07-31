@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { saveSession } from "../api";
+import { saveSession } from "@data";
 import { DrynessModal } from "../components/DrynessModal";
 import { useBlinkTracker } from "../hooks/useBlinkTracker";
 import { cameraPrereqMessage, describeGetUserMediaError, isSecureContextForCamera } from "../lib/cameraContext";
 import { playAlertChime, unlockAlertSound } from "../lib/alertSound";
+import { dismissDrynessNotification, showDrynessNotification } from "../lib/notify";
 import { statusFromBpm, statusLabel, type EyeStatus } from "../types";
-
-const NOTIF_KEY = "pipo-care-notifications";
 
 /** Blinks required to clear a dryness alert. */
 const BLINKS_TO_CLEAR = 5;
@@ -67,30 +66,14 @@ export function Monitor() {
   useEffect(() => () => stopStream(), [stopStream]);
 
   /**
-   * Fires (or re-fires) the OS notification. A stable tag replaces the previous one instead
-   * of stacking them up; renotify makes the replacement alert again rather than land silently.
+   * Fires (or re-fires) the OS notification. The notifier is swapped for chrome.notifications
+   * in the extension build; both replace the previous alert instead of stacking them up.
    */
   const pushDrynessNotification = useCallback((done: number) => {
-    try {
-      if (localStorage.getItem(NOTIF_KEY) !== "1") return;
-      if (!("Notification" in window) || Notification.permission !== "granted") return;
-
-      notificationRef.current?.close();
-      const options = {
-        body: `Blink slowly ${BLINKS_TO_CLEAR} times to clear this — ${done} of ${BLINKS_TO_CLEAR} done.`,
-        tag: "pipo-care-dryness",
-        renotify: true,
-        requireInteraction: true,
-      } as NotificationOptions;
-      const n = new Notification("Pipo Care — your eyes need a blink", options);
-      n.onclick = () => {
-        window.focus();
-        n.close();
-      };
-      notificationRef.current = n;
-    } catch {
-      /* notifications unavailable — the in-app modal and chime still cover it */
-    }
+    showDrynessNotification(
+      "Pipo Care — your eyes need a blink",
+      `Blink slowly ${BLINKS_TO_CLEAR} times to clear this — ${done} of ${BLINKS_TO_CLEAR} done.`
+    );
   }, []);
 
   const stopReminders = useCallback(() => {
@@ -98,8 +81,7 @@ export function Monitor() {
       window.clearInterval(reminderRef.current);
       reminderRef.current = null;
     }
-    notificationRef.current?.close();
-    notificationRef.current = null;
+    dismissDrynessNotification();
   }, []);
 
   const startMonitoring = useCallback(async () => {
@@ -261,9 +243,12 @@ export function Monitor() {
   const status = statusFromBpm(displayAvg || displayBpm);
 
   const prereq = cameraPrereqMessage();
+  // Only meaningful for the LAN dev server over HTTPS. chrome-extension:// pages are a
+  // secure context with no certificate to accept, so the hint would just be confusing there.
   const showLanCertHint =
     isSecureContextForCamera() &&
     typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
     window.location.hostname !== "localhost" &&
     window.location.hostname !== "127.0.0.1";
 

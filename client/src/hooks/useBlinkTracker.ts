@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import type { EyeStatus, SamplePoint } from "../types";
 import { statusFromBpm } from "../types";
+import { visionAssets } from "../lib/visionAssets";
 
 /** MediaPipe Face Landmarker topology — six points per eye for EAR. */
 const LEFT_EYE = [362, 385, 387, 263, 373, 380];
@@ -85,10 +86,9 @@ export function useBlinkTracker() {
     if (landmarkerRef.current) return;
     setError(null);
     try {
-      const wasm = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm";
-      const fileset = await FilesetResolver.forVisionTasks(wasm);
-      const modelUrl =
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+      // CDN for the web app, packaged files for the extension — see lib/visionAssets.
+      const { wasmBase, modelUrl } = visionAssets();
+      const fileset = await FilesetResolver.forVisionTasks(wasmBase);
 
       const tryCreate = async (delegate: "GPU" | "CPU") =>
         FaceLandmarker.createFromOptions(fileset, {

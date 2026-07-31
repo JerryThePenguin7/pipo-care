@@ -206,6 +206,87 @@ The dev server uses **HTTPS** and listens on **all interfaces** (`0.0.0.0`), por
 
 ---
 
+## Chrome extension
+
+The same app also ships as a Chrome MV3 extension that lives in the browser side panel, so
+you can monitor while you work. It is a **separate build from the same source** — the
+Monitor, History, Insights and analysis code are shared; only the data layer and the shell
+differ.
+
+| | Web app | Extension |
+|---|---|---|
+| Storage | Express + JSON files | `chrome.storage.local` |
+| Accounts | Google sign-in | **None** — a local profile, no login page |
+| Analysis | Runs on the server | Runs in the page, same `shared/analysis.js` |
+| MediaPipe | WASM + model from CDN | **Packaged** — works offline |
+| Navigation | Bottom bar / sidebar | Tab strip that fits a 360px panel and a full tab |
+
+### Build it
+
+```bash
+npm install --prefix client
+```
+
+```bash
+npm run build:ext --prefix client
+```
+
+Output lands in **`client/dist-extension/`**. That folder *is* the extension.
+
+### Load it in Chrome (local testing)
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (top right).
+3. Click **Load unpacked** and pick `client/dist-extension`.
+4. Pin **Pipo Care** from the puzzle-piece menu, then click it — the side panel opens.
+5. Finish the three-step setup, then open **Monitor** and click **Start capture**. Chrome asks
+   for camera permission the first time; allow it.
+
+After changing code, run the build again and press **Reload** (↻) on the card in
+`chrome://extensions`.
+
+> If the side panel does not show a camera prompt, use the **Tab** button in the panel header
+> to open the same page in a full tab and grant permission there. Permission is granted per
+> extension origin, so the panel picks it up afterwards.
+
+### Publish to the Chrome Web Store
+
+1. **Zip the build.** Zip the *contents* of `client/dist-extension`, not the folder itself —
+   `manifest.json` must sit at the top level of the archive.
+
+   ```powershell
+   Compress-Archive -Path "client\dist-extension\*" -DestinationPath pipo-care-extension.zip -Force
+   ```
+
+2. **Register as a developer.** Go to the
+   [Developer Dashboard](https://chrome.google.com/webstore/devconsole), sign in, and pay the
+   one-time US$5 registration fee.
+3. **Create the item** → **Add new item** → upload the zip.
+4. **Store listing** — you need a description, a category (Productivity works), a language,
+   and at least one screenshot at **1280×800** or **640×400**. The 128px icon is taken from
+   the package. Screenshots of the panel next to a page show it off best.
+5. **Privacy practices** — this is the part that decides how long review takes:
+   - *Single purpose*: "Monitors the user's blink rate with the camera and warns them when it
+     drops to a level associated with dry eye."
+   - *Permission justifications*: `storage` — keeps sessions and settings on the device;
+     `notifications` — alerts the user when their blink rate is too low; `sidePanel` — the
+     app's UI. Camera is not a manifest permission but you must justify it: it is the input
+     for on-device blink detection.
+   - *Remote code*: answer **No**. The MediaPipe runtime and face model are inside the
+     package precisely so this answer is true — MV3 forbids remotely-hosted code.
+   - *Data usage*: certify that you do not collect or transmit user data. Video frames never
+     leave the machine and there is no server.
+6. **Submit for review.** Expect a few days; anything touching the camera gets a closer look.
+7. **Updating later** — bump `version` in `client/extension/manifest.json`, rebuild, zip, and
+   upload a new package. Chrome refuses an upload whose version is not higher than the last.
+
+### What the extension does not do
+
+Monitoring lives in the panel document, so **closing the side panel ends the session**. A
+service worker cannot hold a camera, and moving capture into an offscreen document would put
+detection back into a throttled hidden context — the same trade-off described under Dryness
+alerts. Keeping the panel open is the honest version.
+
 ## Dryness alerts
 
 When your rolling blink rate stays under 7 blinks/minute for about 7 seconds, a full-screen
