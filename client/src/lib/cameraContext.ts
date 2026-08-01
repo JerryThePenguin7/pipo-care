@@ -18,6 +18,23 @@ export function cameraPrereqMessage(): string | null {
   return null;
 }
 
+/**
+ * Current camera permission, when the browser will tell us.
+ *
+ * Lets a surface that cannot show a prompt (an extension side panel) offer a way forward
+ * *before* the user clicks Start and hits a rejection with no bubble. Returns "unknown"
+ * where the Permissions API is missing or does not know the "camera" name.
+ */
+export async function cameraPermissionState(): Promise<"granted" | "denied" | "prompt" | "unknown"> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) return "unknown";
+    const status = await navigator.permissions.query({ name: "camera" as PermissionName });
+    return status.state as "granted" | "denied" | "prompt";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function describeGetUserMediaError(err: unknown): string {
   const e = err as { name?: string; message?: string };
   const name = e?.name || "";

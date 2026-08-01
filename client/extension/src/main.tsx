@@ -6,7 +6,8 @@ import { ProfileProvider } from "./profile";
 import { ThemeProvider } from "../../src/context/ThemeContext";
 import { setVisionAssets } from "../../src/lib/visionAssets";
 import { setDrynessNotifier } from "../../src/lib/notify";
-import { assetUrl, isExtension } from "./data/store";
+import { setCameraRecoveryProvider } from "../../src/lib/cameraRecovery";
+import { assetUrl, isExtension, isTabSurface } from "./data/store";
 import "./extension.css";
 
 /**
@@ -41,6 +42,28 @@ if (isExtension()) {
       }
     },
   });
+}
+
+/**
+ * Chrome refuses to render a permission prompt inside a side panel, so getUserMedia there
+ * fails with NotAllowedError and the user never sees a bubble. Permission is stored per
+ * extension origin, so granting once in a normal tab makes the panel work from then on.
+ * In a tab we offer nothing — the prompt appears there by itself.
+ */
+if (isExtension()) {
+  setCameraRecoveryProvider(() =>
+    isTabSurface()
+      ? null
+      : {
+          title: "Chrome can’t ask for the camera in the side panel",
+          detail:
+            "That is a Chrome restriction, not a problem with your setup. Open Pipo Care in a tab, press Start capture there and choose Allow — once granted, the side panel can use the camera too.",
+          actionLabel: "Grant camera access in a tab",
+          run: () => {
+            void chrome.runtime.sendMessage({ type: "open-tab", route: "#/monitor" });
+          },
+        }
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

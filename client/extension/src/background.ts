@@ -11,7 +11,15 @@ const NOTIFICATION_ID = "pipo-care-dryness";
 type PanelMessage =
   | { type: "dryness-notify"; title: string; body: string }
   | { type: "dryness-clear" }
-  | { type: "open-tab" };
+  | { type: "open-tab"; route?: string };
+
+/**
+ * ?surface=tab tells the page it can show a camera permission prompt — the side panel
+ * cannot, and needs the grant to happen here first.
+ */
+function panelUrl(route?: string) {
+  return chrome.runtime.getURL(`panel.html?surface=tab${route ?? ""}`);
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   // Clicking the toolbar icon opens the side panel rather than a popup.
@@ -37,7 +45,7 @@ chrome.runtime.onMessage.addListener((message: PanelMessage, _sender, sendRespon
   }
 
   if (message?.type === "open-tab") {
-    chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") });
+    chrome.tabs.create({ url: panelUrl(message.route) });
   }
 
   sendResponse({ ok: true });
@@ -52,6 +60,6 @@ chrome.notifications.onClicked.addListener(async (id) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.windowId != null) await chrome.sidePanel.open({ windowId: tab.windowId });
   } catch {
-    chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") });
+    chrome.tabs.create({ url: panelUrl("#/monitor") });
   }
 });

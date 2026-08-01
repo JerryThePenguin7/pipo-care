@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { NAV_ITEMS } from "../../../src/components/navItems";
-import { isExtension } from "../data/store";
+import { cameraPermissionState } from "../../../src/lib/cameraContext";
+import { isExtension, isTabSurface } from "../data/store";
 
 /**
  * Extension chrome: a compact header plus a horizontal tab strip.
@@ -10,8 +12,21 @@ import { isExtension } from "../data/store";
  * scrolls does that without a breakpoint deciding which of two navigations exists.
  */
 export function Shell({ children }: { children: React.ReactNode }) {
+  // In a tab, spell out the one thing a tab is uniquely good for: granting the camera.
+  const [needsGrant, setNeedsGrant] = useState(false);
+  useEffect(() => {
+    if (!isTabSurface()) return;
+    let alive = true;
+    cameraPermissionState().then((s) => {
+      if (alive) setNeedsGrant(s === "prompt" || s === "denied");
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const openInTab = () => {
-    if (isExtension()) void chrome.runtime.sendMessage({ type: "open-tab" });
+    if (isExtension()) void chrome.runtime.sendMessage({ type: "open-tab", route: window.location.hash });
     else window.open(window.location.href, "_blank");
   };
 
@@ -44,6 +59,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </NavLink>
         ))}
       </nav>
+
+      {needsGrant && (
+        <p className="ext-grant-hint" role="status">
+          <strong>One-time setup:</strong> open <strong>Monitor</strong>, press <strong>Start capture</strong> and choose{" "}
+          <strong>Allow</strong>. Chrome remembers it for Pipo Care, so the side panel will work afterwards.
+        </p>
+      )}
 
       <main className="ext-main">{children}</main>
     </div>

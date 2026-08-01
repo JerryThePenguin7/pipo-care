@@ -54,6 +54,21 @@ export function isExtension(): boolean {
   return typeof chrome !== "undefined" && !!chrome?.runtime?.id;
 }
 
+/**
+ * True when this document is a full tab rather than the side panel.
+ *
+ * The two surfaces differ in one way that matters: a tab can show a camera permission
+ * prompt and the panel cannot. The opener marks tabs with ?surface=tab, which survives the
+ * hash router.
+ */
+export function isTabSurface(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("surface") === "tab";
+  } catch {
+    return false;
+  }
+}
+
 /** Resolves a packaged asset (WASM, model, icon) to a chrome-extension:// URL. */
 export function assetUrl(relativePath: string): string {
   if (isExtension()) return chrome.runtime.getURL(relativePath);

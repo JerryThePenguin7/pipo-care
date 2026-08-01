@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { saveSession } from "@data";
 import { DrynessModal } from "../components/DrynessModal";
 import { useBlinkTracker } from "../hooks/useBlinkTracker";
-import { cameraPrereqMessage, describeGetUserMediaError, isSecureContextForCamera } from "../lib/cameraContext";
+import {
+  cameraPermissionState,
+  cameraPrereqMessage,
+  describeGetUserMediaError,
+  isSecureContextForCamera,
+} from "../lib/cameraContext";
+import { cameraRecovery } from "../lib/cameraRecovery";
 import { playAlertChime, unlockAlertSound } from "../lib/alertSound";
 import { dismissDrynessNotification, showDrynessNotification } from "../lib/notify";
 import { statusFromBpm, statusLabel, type EyeStatus } from "../types";
@@ -31,6 +37,8 @@ export function Monitor() {
   const alertsRef = useRef(0);
 
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  /** "prompt"/"denied" on a surface that cannot show a prompt → offer the recovery route up front. */
+  const [permissionState, setPermissionState] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
   const [saving, setSaving] = useState(false);
   const [rateUnit, setRateUnit] = useState<"min" | "hour">("min");
   const [showDryness, setShowDryness] = useState(false);
@@ -54,6 +62,16 @@ export function Monitor() {
   useEffect(() => {
     tracker.initLandmarker();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    cameraPermissionState().then((s) => {
+      if (alive) setPermissionState(s);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const stopStream = useCallback(() => {
@@ -243,6 +261,12 @@ export function Monitor() {
   const status = statusFromBpm(displayAvg || displayBpm);
 
   const prereq = cameraPrereqMessage();
+  /**
+   * Offer the recovery route when the camera has actually been refused, or pre-emptively when
+   * permission has not been granted yet on a surface that cannot ask for it.
+   */
+  const needsRecovery = Boolean(permissionError) || permissionState === "prompt" || permissionState === "denied";
+  const recovery = needsRecovery ? cameraRecovery() : null;
   // Only meaningful for the LAN dev server over HTTPS. chrome-extension:// pages are a
   // secure context with no certificate to accept, so the hint would just be confusing there.
   const showLanCertHint =
@@ -339,10 +363,27 @@ export function Monitor() {
         )}
       </section>
 
-      {permissionError && (
+      {permissionError && !recovery && (
         <p style={{ color: "var(--bad)", fontWeight: 600, marginTop: 12 }} role="alert">
           {permissionError}
         </p>
+      )}
+
+      {/* A surface that cannot show a permission prompt tells the user where it can be granted. */}
+      {recovery && (
+        <section
+          className="card"
+          style={{ padding: 14, marginTop: 12, background: "var(--tint)", borderColor: "var(--primary)" }}
+          role={permissionError ? "alert" : "status"}
+        >
+          <strong style={{ fontSize: "0.95rem" }}>{recovery.title}</strong>
+          <p className="sub" style={{ margin: "6px 0 12px", fontSize: "0.85rem", color: "var(--text)" }}>
+            {recovery.detail}
+          </p>
+          <button type="button" className="btn-primary" onClick={recovery.run}>
+            {recovery.actionLabel}
+          </button>
+        </section>
       )}
 
       <div style={{ display: "flex", justifyContent: "center", margin: "18px 0" }}>

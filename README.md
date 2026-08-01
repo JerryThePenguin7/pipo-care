@@ -245,9 +245,20 @@ Output lands in **`client/dist-extension/`**. That folder *is* the extension.
 After changing code, run the build again and press **Reload** (↻) on the card in
 `chrome://extensions`.
 
-> If the side panel does not show a camera prompt, use the **Tab** button in the panel header
-> to open the same page in a full tab and grant permission there. Permission is granted per
-> extension origin, so the panel picks it up afterwards.
+### Granting the camera (one-time)
+
+**Chrome will not show a camera permission prompt inside a side panel.** `getUserMedia` there
+fails immediately with `NotAllowedError` and no bubble ever appears — this is a Chrome
+restriction, not a bug in the extension or your settings.
+
+The app handles it: on the Monitor screen the panel shows **"Chrome can't ask for the camera
+in the side panel"** with a **Grant camera access in a tab** button. Click it, press **Start
+capture** in the tab that opens, and choose **Allow**. Permission is stored per extension
+origin, so the side panel works from then on — no reload needed.
+
+If you ever need to redo it, the same page is behind the **Tab** button in the panel header.
+To reset the grant: `chrome://settings/content/camera` → find the `chrome-extension://…`
+entry and remove it.
 
 ### Publish to the Chrome Web Store
 

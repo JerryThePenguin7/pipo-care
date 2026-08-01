@@ -126,6 +126,17 @@ body,
   min-width: 0;
 }
 
+/* Shown only in the tab surface, where the camera prompt can actually appear. */
+.ext-grant-hint {
+  margin: 0;
+  padding: 11px 14px;
+  background: var(--tint);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 /* No fixed bottom bar here, so the shared page padding can come back down. */
 .ext-main .page {
   padding: 16px 14px 28px;
