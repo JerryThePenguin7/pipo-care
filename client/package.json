@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:ext": "vite build --config vite.extension.config.ts",
+    "dev:ext": "vite --config vite.extension.config.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.17",
@@ -15,6 +17,7 @@
     "recharts": "^2.13.3"
   },
   "devDependencies": {
+    "@types/chrome": "^0.2.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-basic-ssl": "1.2.0",

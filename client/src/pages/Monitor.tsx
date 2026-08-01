@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { saveSession } from "../api";
+import { saveSession } from "@data";
 import { DrynessModal } from "../components/DrynessModal";
 import { useBlinkTracker } from "../hooks/useBlinkTracker";
-import { cameraPrereqMessage, describeGetUserMediaError, isSecureContextForCamera } from "../lib/cameraContext";
+import {
+  cameraPermissionState,
+  cameraPrereqMessage,
+  describeGetUserMediaError,
+  isSecureContextForCamera,
+} from "../lib/cameraContext";
+import { cameraRecovery } from "../lib/cameraRecovery";
+import { playAlertChime, unlockAlertSound } from "../lib/alertSound";
+import { dismissDrynessNotification, showDrynessNotification } from "../lib/notify";
 import { statusFromBpm, statusLabel, type EyeStatus } from "../types";
 
-const NOTIF_KEY = "pipo-care-notifications";
+/** Blinks required to clear a dryness alert. */
+const BLINKS_TO_CLEAR = 5;
+/** How often the alert re-notifies while it is still unresolved and the tab is hidden. */
+const REMINDER_MS = 8_000;
+/** Quiet period after an alert clears, so it cannot immediately re-fire. */
+const SUPPRESS_MS = 50_000;
+/** Rolling rate must stay under the threshold this long before an alert opens. */
+const LOW_FOR_MS = 7_000;
 
 function badgeClass(s: EyeStatus) {
   if (s === "healthy") return "good";
@@ -22,16 +37,41 @@ export function Monitor() {
   const alertsRef = useRef(0);
 
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  /** "prompt"/"denied" on a surface that cannot show a prompt → offer the recovery route up front. */
+  const [permissionState, setPermissionState] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
   const [saving, setSaving] = useState(false);
   const [rateUnit, setRateUnit] = useState<"min" | "hour">("min");
   const [showDryness, setShowDryness] = useState(false);
+  const [blinksDone, setBlinksDone] = useState(0);
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
+
+  /** Session blink count when the current alert opened; progress is measured from it. */
+  const alertBaselineRef = useRef(0);
+  const alertOpenRef = useRef(false);
+  const reminderRef = useRef<number | null>(null);
+  const notificationRef = useRef<Notification | null>(null);
+  /** Latest blink count, readable from timers and callbacks without stale closures. */
+  const blinkCountRef = useRef(0);
 
   const tracker = useBlinkTracker();
 
   useEffect(() => {
+    blinkCountRef.current = tracker.blinkCount;
+  }, [tracker.blinkCount]);
+
+  useEffect(() => {
     tracker.initLandmarker();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    cameraPermissionState().then((s) => {
+      if (alive) setPermissionState(s);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const stopStream = useCallback(() => {
@@ -43,8 +83,30 @@ export function Monitor() {
 
   useEffect(() => () => stopStream(), [stopStream]);
 
+  /**
+   * Fires (or re-fires) the OS notification. The notifier is swapped for chrome.notifications
+   * in the extension build; both replace the previous alert instead of stacking them up.
+   */
+  const pushDrynessNotification = useCallback((done: number) => {
+    showDrynessNotification(
+      "Pipo Care — your eyes need a blink",
+      `Blink slowly ${BLINKS_TO_CLEAR} times to clear this — ${done} of ${BLINKS_TO_CLEAR} done.`
+    );
+  }, []);
+
+  const stopReminders = useCallback(() => {
+    if (reminderRef.current !== null) {
+      window.clearInterval(reminderRef.current);
+      reminderRef.current = null;
+    }
+    dismissDrynessNotification();
+  }, []);
+
   const startMonitoring = useCallback(async () => {
     setPermissionError(null);
+    // This click is the only chance to unlock audio — alert chimes fire much later,
+    // long after any user gesture, and browsers block a cold AudioContext.
+    unlockAlertSound();
     const blocked = cameraPrereqMessage();
     if (blocked) {
       setPermissionError(blocked);
@@ -69,6 +131,9 @@ export function Monitor() {
       alertsRef.current = 0;
       lowSinceRef.current = null;
       suppressUntilRef.current = 0;
+      alertOpenRef.current = false;
+      blinkCountRef.current = 0;
+      setBlinksDone(0);
       await tracker.start(v);
     } catch (e) {
       console.error(e);
@@ -80,7 +145,10 @@ export function Monitor() {
     const started = sessionStartedAt;
     const snap = tracker.stop();
     stopStream();
+    alertOpenRef.current = false;
     setShowDryness(false);
+    setBlinksDone(0);
+    stopReminders();
     setSessionStartedAt(null);
     if (!started || !snap) return;
 
@@ -104,39 +172,88 @@ export function Monitor() {
     } finally {
       setSaving(false);
     }
-  }, [sessionStartedAt, stopStream, tracker]);
+  }, [sessionStartedAt, stopReminders, stopStream, tracker]);
 
+  /** Clears the alert: blinks completed, or the user used the delayed dismiss link. */
+  const resolveDryness = useCallback(() => {
+    alertOpenRef.current = false;
+    setShowDryness(false);
+    setBlinksDone(0);
+    suppressUntilRef.current = Date.now() + SUPPRESS_MS;
+    lowSinceRef.current = null;
+    stopReminders();
+  }, [stopReminders]);
+
+  /**
+   * Opens the alert and starts nagging. The reminder keeps re-notifying with a chime for as
+   * long as the alert is unresolved and the tab is hidden — that is the whole point: someone
+   * who tabbed away should not be able to ignore it, and only blinking stops it.
+   */
+  const openDryness = useCallback(() => {
+    if (alertOpenRef.current) return;
+    alertOpenRef.current = true;
+    alertBaselineRef.current = blinkCountRef.current;
+    alertsRef.current += 1;
+    setBlinksDone(0);
+    setShowDryness(true);
+    playAlertChime();
+    pushDrynessNotification(0);
+
+    reminderRef.current = window.setInterval(() => {
+      if (!alertOpenRef.current) return;
+      const done = Math.min(
+        BLINKS_TO_CLEAR,
+        Math.max(0, blinkCountRef.current - alertBaselineRef.current)
+      );
+      // On screen the modal already shows the countdown, so only nag when hidden.
+      if (document.hidden) {
+        pushDrynessNotification(done);
+        playAlertChime();
+      }
+    }, REMINDER_MS);
+  }, [pushDrynessNotification]);
+
+  // Detect a sustained low blink rate and open the alert.
   useEffect(() => {
     if (!tracker.isRunning) {
       lowSinceRef.current = null;
       return;
     }
+    if (alertOpenRef.current) return;
+
     const now = Date.now();
     if (now < suppressUntilRef.current) return;
 
     if (tracker.bpm < 7) {
       if (lowSinceRef.current === null) lowSinceRef.current = now;
-      else if (now - lowSinceRef.current > 7000) {
-        setShowDryness(true);
-        try {
-          if (localStorage.getItem(NOTIF_KEY) === "1" && Notification.permission === "granted") {
-            new Notification("Pipo Care", { body: "Blink rate is low — time to blink and rest your eyes." });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      else if (now - lowSinceRef.current > LOW_FOR_MS) openDryness();
     } else {
       lowSinceRef.current = null;
     }
-  }, [tracker.bpm, tracker.isRunning]);
+  }, [tracker.bpm, tracker.isRunning, openDryness]);
 
-  const acknowledgeDryness = useCallback(() => {
-    alertsRef.current += 1;
-    suppressUntilRef.current = Date.now() + 50_000;
-    setShowDryness(false);
-    lowSinceRef.current = null;
+  // Count blinks against the alert and clear it once the target is reached.
+  useEffect(() => {
+    if (!showDryness) return;
+    const done = Math.max(0, tracker.blinkCount - alertBaselineRef.current);
+    setBlinksDone(Math.min(done, BLINKS_TO_CLEAR));
+    if (done >= BLINKS_TO_CLEAR) resolveDryness();
+  }, [showDryness, tracker.blinkCount, resolveDryness]);
+
+  // Coming back to the tab should silence the OS notification; the modal takes over.
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) {
+        notificationRef.current?.close();
+        notificationRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
+
+  // Never leave an interval or a notification behind.
+  useEffect(() => () => stopReminders(), [stopReminders]);
 
   const displayBpm = tracker.bpm;
   const displayAvg = tracker.avgBpmSession;
@@ -144,15 +261,29 @@ export function Monitor() {
   const status = statusFromBpm(displayAvg || displayBpm);
 
   const prereq = cameraPrereqMessage();
+  /**
+   * Offer the recovery route when the camera has actually been refused, or pre-emptively when
+   * permission has not been granted yet on a surface that cannot ask for it.
+   */
+  const needsRecovery = Boolean(permissionError) || permissionState === "prompt" || permissionState === "denied";
+  const recovery = needsRecovery ? cameraRecovery() : null;
+  // Only meaningful for the LAN dev server over HTTPS. chrome-extension:// pages are a
+  // secure context with no certificate to accept, so the hint would just be confusing there.
   const showLanCertHint =
     isSecureContextForCamera() &&
     typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
     window.location.hostname !== "localhost" &&
     window.location.hostname !== "127.0.0.1";
 
   return (
     <div className="page">
-      <DrynessModal open={showDryness} onAcknowledge={acknowledgeDryness} />
+      <DrynessModal
+        open={showDryness}
+        blinksDone={blinksDone}
+        blinksNeeded={BLINKS_TO_CLEAR}
+        onDismiss={resolveDryness}
+      />
 
       <header style={{ marginBottom: 12 }}>
         <h1 className="h1">Monitoring</h1>
@@ -232,10 +363,27 @@ export function Monitor() {
         )}
       </section>
 
-      {permissionError && (
+      {permissionError && !recovery && (
         <p style={{ color: "var(--bad)", fontWeight: 600, marginTop: 12 }} role="alert">
           {permissionError}
         </p>
+      )}
+
+      {/* A surface that cannot show a permission prompt tells the user where it can be granted. */}
+      {recovery && (
+        <section
+          className="card"
+          style={{ padding: 14, marginTop: 12, background: "var(--tint)", borderColor: "var(--primary)" }}
+          role={permissionError ? "alert" : "status"}
+        >
+          <strong style={{ fontSize: "0.95rem" }}>{recovery.title}</strong>
+          <p className="sub" style={{ margin: "6px 0 12px", fontSize: "0.85rem", color: "var(--text)" }}>
+            {recovery.detail}
+          </p>
+          <button type="button" className="btn-primary" onClick={recovery.run}>
+            {recovery.actionLabel}
+          </button>
+        </section>
       )}
 
       <div style={{ display: "flex", justifyContent: "center", margin: "18px 0" }}>

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import path from "node:path";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
@@ -37,6 +38,9 @@ const extraHosts = (process.env.PIPO_ALLOWED_HOSTS || "")
  */
 export default defineConfig({
   plugins: [react(), basicSsl()],
+  // Shared pages import their data layer as "@data"; the web build points it at the
+  // REST client, the extension build at chrome.storage (see vite.extension.config.ts).
+  resolve: { alias: { "@data": path.resolve(__dirname, "src/api.ts") } },
   server: {
     host: true, // listen on 0.0.0.0 — use https://<this-pc-lan-ip>:5173 on phones
     port: 5173,

@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "test": "node --test"
+    "test": "node --test ../shared/analysis.test.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

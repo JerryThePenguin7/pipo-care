@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 client/dist/
+client/dist-extension/
 
 # Vite
 .vite/
@@ -19,9 +20,10 @@ npm-debug.log*
 .env.*
 !.env.example
 
-# Secrets and account data (never commit these)
+# Secrets and runtime data (never commit these — the repo is public)
 server/data/.session-secret
 server/data/users.json
+server/data/sessions.json
 
 # Editor / OS
 .DS_Store

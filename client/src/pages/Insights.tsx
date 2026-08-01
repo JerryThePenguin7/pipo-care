@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchSessions } from "../api";
+import { fetchSessions } from "@data";
 import type { SessionRecord } from "../types";
 
 export function Insights() {

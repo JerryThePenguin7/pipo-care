@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Pipo Care — Developer Handoff Document</title>
+<style>
+  @page { margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #0f172a;
+    line-height: 1.55;
+    font-size: 11.5px;
+    margin: 0;
+  }
+  h1 { font-size: 26px; color: #2e5bff; margin: 0 0 2px; }
+  h2 {
+    font-size: 17px; color: #2e5bff; border-bottom: 2px solid #dbe4ff;
+    padding-bottom: 4px; margin-top: 28px; page-break-after: avoid;
+  }
+  h3 { font-size: 13.5px; margin: 18px 0 6px; page-break-after: avoid; }
+  .subtitle { color: #64748b; font-size: 13px; margin-bottom: 4px; }
+  .meta { color: #64748b; font-size: 10.5px; margin-bottom: 24px; }
+  code, pre {
+    font-family: Consolas, "Courier New", monospace;
+    background: #f1f5ff; border-radius: 4px;
+  }
+  code { padding: 1px 5px; font-size: 10.5px; }
+  pre {
+    padding: 10px 14px; font-size: 10px; line-height: 1.5;
+    border: 1px solid #dbe4ff; overflow-x: hidden; white-space: pre-wrap;
+    page-break-inside: avoid;
+  }
+  table {
+    border-collapse: collapse; width: 100%; margin: 8px 0 16px;
+    font-size: 10.5px; page-break-inside: avoid;
+  }
+  th { background: #2e5bff; color: white; text-align: left; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 9px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8faff; }
+  ul, ol { margin: 6px 0 12px; padding-left: 22px; }
+  li { margin-bottom: 3px; }
+  .badge {
+    display: inline-block; background: #e8eeff; color: #2e5bff; font-weight: 600;
+    border-radius: 999px; padding: 2px 10px; font-size: 10px; margin-right: 6px;
+  }
+  .warn {
+    background: #fff7ed; border-left: 4px solid #f59e0b;
+    padding: 8px 12px; margin: 10px 0; page-break-inside: avoid;
+  }
+  .note {
+    background: #eef4ff; border-left: 4px solid #2e5bff;
+    padding: 8px 12px; margin: 10px 0; page-break-inside: avoid;
+  }
+  .pagebreak { page-break-before: always; }
+  .toc li { margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Pipo Care</h1>
+<div class="subtitle">Eye-dryness protection web application — Developer Handoff Document</div>
+<div class="meta">Version 1.1 prototype &nbsp;·&nbsp; Handoff date: June 11, 2026 &nbsp;·&nbsp; Updated: July 30, 2026 (AI dry-eye analysis, Google sign-in + onboarding, responsive desktop layout) &nbsp;·&nbsp; Stack: Node.js + Express / React + Vite + TypeScript / MediaPipe</div>
+
+<h2>0. Working Agreement</h2>
+<div class="note">
+  <strong>Every change is pushed to GitHub.</strong> The repository is
+  <a href="https://github.com/JerryThePenguin7/pipo-care">github.com/JerryThePenguin7/pipo-care</a>.
+  Nothing stays local: finish a change, commit it, push it. Standing instruction from the project owner,
+  1&nbsp;August&nbsp;2026.
+</div>
+<ul>
+  <li><strong>Working branch:</strong> <code>feat/ai-dry-eye-analysis</code>. <code>main</code> is still the
+    original import — merge or open a PR when the owner is ready.</li>
+  <li><strong>Docs ship with the code.</strong> Update this file and <code>README.md</code> in the same commit
+    as the change they describe, otherwise the next developer reads a lie.</li>
+  <li><strong>Never commit runtime data or secrets.</strong> The repo is <em>public</em>.
+    <code>server/data/sessions.json</code> (real monitoring history, tagged with a Google account id),
+    <code>server/data/users.json</code> and <code>server/data/.session-secret</code> are all gitignored and
+    must stay that way. <code>db.js</code> recreates them on first run, so a fresh clone works with none of
+    them present.</li>
+  <li><strong>Before pushing:</strong> <code>npm test</code> (19 engine cases),
+    <code>npx tsc --noEmit</code> in <code>client/</code>, and both builds
+    (<code>npm run build --prefix client</code>, <code>npm run build:ext --prefix client</code>).</li>
+</ul>
+
+<h2>1. Executive Summary</h2>
+<p>
+<strong>Pipo Care</strong> is a web application that protects users from digital eye strain and dryness while
+they use screens. During a monitoring session, the app uses the device camera and an on-device computer-vision
+pipeline (Google <strong>MediaPipe Face Landmarker</strong>) to count the user's blinks in real time and compute a
+blink rate per minute. When the blink rate falls below <strong>7 blinks/minute</strong> (a recognized dry-eye risk
+indicator), a full-screen alert opens and only clears once the app has counted five real blinks. Every session is stored on a small
+Node.js backend so users can review history, per-session detail, and trend charts.
+</p>
+<p>
+The product is a <strong>working prototype</strong>: all core features run end-to-end (camera capture, blink
+detection on desktop and mobile, dryness alerts, persistence, history, insights, settings with dark mode).
+It is currently deployed nowhere — it runs locally and over the local network for demos. Video frames never
+leave the device; only numeric session statistics are sent to the backend.
+</p>
+<table>
+  <tr><th style="width:30%">Item</th><th>Status</th></tr>
+  <tr><td>Session-based blink tracking (start/stop)</td><td>Done — MediaPipe Face Landmarker + Eye Aspect Ratio (EAR), adaptive per-user baseline</td></tr>
+  <tr><td>Dryness alert &lt; 7 blinks/min</td><td>Done — full-screen modal cleared by blinking 5 times (no acknowledge button); repeating notification + chime while the tab is hidden. See §5e</td></tr>
+  <tr><td>History / session detail / insights charts</td><td>Done — Recharts; per-5-second samples stored per session</td></tr>
+  <tr><td>AI dry-eye analysis on the home page</td><td>Done — explainable rule model over stored session statistics (<code>shared/analysis.js</code>, <code>GET /api/analysis</code>); see §5b</td></tr>
+  <tr><td>Chrome extension</td><td>Done — MV3 side panel built from the same source, no login, local storage, packaged MediaPipe; see §5f</td></tr>
+  <tr><td>Backend persistence</td><td>Done — Express REST API, JSON file storage (<code>server/data/sessions.json</code>)</td></tr>
+  <tr><td>Mobile support</td><td>Working over HTTPS dev server (self-signed cert); see §7 Known Issues</td></tr>
+  <tr><td>Authentication / multi-user</td><td>Done — Google sign-in (ID token verified server-side), signed session cookie, per-user session scoping; see §5c</td></tr>
+  <tr><td>Profile &amp; onboarding</td><td>Done — name, photo, theme, and a 1-5 questionnaire that feeds the analysis</td></tr>
+  <tr><td>Responsive desktop layout</td><td>Done — sidebar shell ≥768px, bottom tab bar below; breakpoints in <code>index.css</code></td></tr>
+  <tr><td>Production hosting</td><td>Not implemented — needs real HTTPS for phone cameras</td></tr>
+</table>
+
+<h2>2. Tech Stack</h2>
+<table>
+  <tr><th style="width:22%">Layer</th><th style="width:38%">Technology</th><th>Notes</th></tr>
+  <tr><td>Frontend</td><td>React 18, TypeScript, Vite 5, React Router 6</td><td>Responsive SPA: 480px single column + bottom tabs on phones, sidebar shell up to 1040px on desktop</td></tr>
+  <tr><td>Auth</td><td>Google Identity Services (browser) + google-auth-library 10 (server)</td><td>ID token verified against Google's keys, then an HMAC-signed HttpOnly session cookie (30 days)</td></tr>
+  <tr><td>Eye tracking</td><td>@mediapipe/tasks-vision 0.10.17</td><td>Runs fully in-browser (WASM). Web build fetches model + WASM from CDN; the extension ships them (MV3 bans remote code)</td></tr>
+  <tr><td>Charts</td><td>Recharts 2</td><td>Insights + session detail graphs</td></tr>
+  <tr><td>Backend</td><td>Node.js (ES modules), Express 4, uuid, cors</td><td>Plain JSON-file persistence — no database server needed</td></tr>
+  <tr><td>Dev HTTPS</td><td>@vitejs/plugin-basic-ssl 1.2.0</td><td>Required so mobile Chrome allows camera on LAN IPs</td></tr>
+  <tr><td>Styling</td><td>Hand-rolled CSS variables (<code>client/src/index.css</code>) + inline styles</td><td>Inter font (Google Fonts), blue/white scheme, dark mode via <code>.dark</code> class</td></tr>
+</table>
+
+<h2>3. Project Structure</h2>
+<pre>
+Pipo care/
+├── package.json              # Root scripts: dev (runs server+client), build, start
+├── README.md                 # Setup & run instructions (install, LAN hosting, troubleshooting)
+│
+├── shared/                   # ---- USED BY BOTH THE SERVER AND THE EXTENSION ----
+│   ├── analysis.js           # ★ Dry-eye risk scoring engine (pure functions). See §5b
+│   ├── analysis.test.mjs     # node --test coverage for the scoring rules (npm test)
+│   ├── onboarding.js         # Questionnaire schema + validation
+│   └── *.d.ts                # Type declarations so the TS builds can import the .js
+│
+├── server/                   # ---- BACKEND (Node.js + Express) ----
+│   ├── index.js              # App entry. REST API, static serving of client/dist in production,
+│   │                         #   binds 0.0.0.0, prints LAN URL on startup
+│   ├── auth.js               # ★ Google ID-token verification, signed session cookies, requireAuth
+│   ├── db.js                 # JSON persistence: sessions.json + users.json, legacy-session adoption
+│   ├── data/sessions.json    # All stored sessions (created automatically; safe to delete to reset)
+│   └── package.json          # dev: node --watch | start: node index.js
+│
+└── client/                   # ---- FRONTEND (React + Vite + TS) ----
+    ├── vite.config.ts        # WEB build. HTTPS dev server (basic-ssl), host 0.0.0.0, port 5173,
+    │                         #   proxies /api -> :3001, aliases "@data" -> src/api.ts
+    ├── vite.extension.config.ts  # ★ EXTENSION build -> client/dist-extension. See §5f
+    ├── extension/            # ---- CHROME EXTENSION (MV3) ----
+    │   ├── manifest.json     #   MV3 manifest: side panel, service worker, CSP
+    │   ├── panel.html        #   Side-panel / tab document
+    │   ├── public/           #   Packaged MediaPipe wasm + face model + icons (no CDN!)
+    │   └── src/
+    │       ├── background.ts #   Service worker: toolbar behaviour + chrome.notifications
+    │       ├── App.tsx       #   Routes, setup gate (no login)
+    │       ├── profile.tsx   #   Local profile context (the AuthContext stand-in)
+    │       ├── data/         #   chrome.storage.local layer = the "@data" module here
+    │       ├── components/Shell.tsx  # Header + tab strip
+    │       └── pages/        #   Home, Setup, Settings (Monitor/History/etc. are shared)
+    ├── index.html            # Inter font load, mobile viewport, theme color
+    └── src/
+        ├── main.tsx          # Bootstrap: Router + ThemeProvider + AuthProvider
+        ├── App.tsx           # Route table + RequireAccount guard (login → onboarding → app)
+        ├── types.ts          # Shared types: SessionRecord, SamplePoint, EyeStatus, User,
+        │                     #   DryEyeAnalysis + statusFromBpm() thresholds (15/10/7)
+        ├── api.ts            # Typed fetch wrappers + ApiError (status lets callers spot 401)
+        ├── index.css         # ★ Design system AND the responsive rules: breakpoints at 768/1200px
+        ├── hooks/
+        │   └── useBlinkTracker.ts   # ★ CORE: MediaPipe pipeline, EAR computation, adaptive
+        │                            #   baseline, blink state machine, per-5s sampling
+        ├── lib/
+        │   ├── cameraContext.ts     # Secure-context checks + human-readable getUserMedia errors
+        │   ├── googleIdentity.ts    # Loads the GIS script, renders the Google button
+        │   └── avatar.ts            # Canvas crop/downscale for uploaded profile pictures
+        ├── context/
+        │   ├── ThemeContext.tsx     # Dark mode state, persisted to localStorage
+        │   └── AuthContext.tsx      # ★ Session state, sign in/out, profile updates
+        ├── components/
+        │   ├── Layout.tsx           # App shell: SideNav + Outlet + BottomNav
+        │   ├── BottomNav.tsx        # Mobile tab bar (hidden ≥768px)
+        │   ├── SideNav.tsx          # Desktop sidebar with account + sign out (hidden <768px)
+        │   ├── navItems.tsx         # Nav destinations + SVG icons shared by both navigations
+        │   ├── Avatar.tsx           # Profile picture with initials fallback
+        │   ├── DrynessModal.tsx     # Full-screen "Dryness detected" alert with acknowledge button
+        │   ├── AiAnalysisCard.tsx   # ★ Home-page dry-eye analysis read-out (dial, signals, actions)
+        │   └── Mascot.tsx           # SVG mascot for the home page
+        └── pages/
+            ├── Login.tsx            # ★ Google sign-in, unconfigured-state help, dev login
+            ├── Onboarding.tsx       # ★ 3-step setup: profile · theme · scale questions
+            ├── Home.tsx             # Greeting by name, Start CTA, AI dry-eye analysis card
+            ├── Monitor.tsx          # ★ Camera view, start/stop session, live stats, /min vs /hour
+            │                        #   toggle, dryness alert trigger logic, saves session on stop
+            ├── History.tsx          # Session list grouped by week, good/needs-care indicator, filters
+            ├── SessionDetail.tsx    # Full session metadata, blink-rate chart, per-sample table
+            ├── Insights.tsx         # Per-session average line chart, combined sample cloud,
+            │                        #   comfort-zone distribution bar chart
+            └── Settings.tsx         # Account (edit name/photo), review answers, notifications,
+                                     #   dark mode (saved to profile), sign out
+</pre>
+
+<div class="pagebreak"></div>
+
+<h2>4. Architecture &amp; Data Flow</h2>
+<h3>4.1 Runtime topology</h3>
+<ul>
+  <li><strong>Development:</strong> two processes via <code>npm run dev</code> — Vite dev server (<code>https://localhost:5173</code>, also on LAN) and Express API (<code>http://localhost:3001</code>). Vite proxies <code>/api/*</code> to Express, so the browser only talks to one origin.</li>
+  <li><strong>Production mode:</strong> single process — Express serves the built SPA from <code>client/dist</code> and the API on the same port (3001) when <code>NODE_ENV=production</code>.</li>
+</ul>
+
+<h3>4.2 A monitoring session, end to end</h3>
+<ol>
+  <li>User taps <strong>Start capture</strong> on the Monitor page. <code>cameraPrereqMessage()</code> verifies the page is a secure context (HTTPS/localhost) before requesting the camera (1280×720@30 ideal, front camera).</li>
+  <li><code>useBlinkTracker.start(video)</code> begins a <code>requestAnimationFrame</code> loop. Each frame is passed to MediaPipe <code>FaceLandmarker.detectForVideo()</code> with a <strong>monotonically increasing timestamp derived from <code>video.currentTime</code></strong> (important for mobile correctness).</li>
+  <li>For each frame the hook computes the <strong>Eye Aspect Ratio (EAR)</strong> per eye from 6 landmarks, plus MediaPipe blendshape blink scores. A blink is a transition <em>closed → open</em> in a hysteresis state machine (see §5).</li>
+  <li>Live stats: rolling blinks-in-last-60s (displayed as blinks/min), session average, total count. A <code>SamplePoint</code> snapshot is appended every ~5 seconds.</li>
+  <li>If the rolling rate stays <strong>&lt; 7/min for ~7 s</strong> (logic in <code>Monitor.tsx</code>), the full-screen <code>DrynessModal</code> opens (plus optional browser notification). Acknowledging suppresses re-alerts for 50 s.</li>
+  <li>On <strong>Stop</strong>, the tracker returns a snapshot, and the page POSTs the complete <code>SessionRecord</code> to <code>/api/sessions</code>.</li>
+</ol>
+
+<h3>4.3 Data model (<code>SessionRecord</code>)</h3>
+<pre>
+{
+  id: string (uuid, server-generated),
+  startedAt / endedAt: epoch ms,      durationMs: number,
+  blinkCount: number,                 avgBlinksPerMin: number,
+  minBpm / maxBpm: number | null,     alertsTriggered: number,
+  status: "healthy" | "medium" | "slightly_dry" | "dry",
+  samples: [{ t: seconds, bpm, cumBlinks, avgEar, status }, ...],   // one per ~5s
+  notes: string,                      createdAt: epoch ms
+}
+</pre>
+<p>Status thresholds (in <code>client/src/types.ts → statusFromBpm</code>): ≥15 healthy · ≥10 medium · ≥7 slightly_dry · &lt;7 dry.</p>
+
+<h3>4.4 REST API (server/index.js)</h3>
+<table>
+  <tr><th style="width:34%">Endpoint</th><th>Description</th></tr>
+  <tr><td><code>GET /api/sessions</code></td><td>All sessions, newest first</td></tr>
+  <tr><td><code>GET /api/sessions/:id</code></td><td>One session (404 if missing)</td></tr>
+  <tr><td><code>POST /api/sessions</code></td><td>Create session. Validates required numeric fields, status enum, samples array. Returns 201 + stored record</td></tr>
+  <tr><td><code>DELETE /api/sessions/:id</code></td><td>Delete a session (no UI for this yet)</td></tr>
+  <tr><td><code>GET /api/analysis</code></td><td>Dry-eye risk read-out over stored sessions. Optional <code>?days=</code> window (default 14, valid 1-365). See §5b</td></tr>
+  <tr><td><code>GET /api/auth/config</code></td><td>Public: Google client ID (or empty) + whether dev login is on. Drives what the login page renders</td></tr>
+  <tr><td><code>POST /api/auth/google</code></td><td>Body <code>{credential}</code> — verifies the Google ID token, creates/refreshes the account, sets the session cookie</td></tr>
+  <tr><td><code>POST /api/auth/dev-login</code></td><td>Local test account. 404 unless <code>PIPO_ALLOW_DEV_LOGIN=1</code> and not production</td></tr>
+  <tr><td><code>POST /api/auth/logout</code></td><td>Clears the session cookie</td></tr>
+  <tr><td><code>GET /api/auth/me</code></td><td>Current account, or 401</td></tr>
+  <tr><td><code>GET /api/onboarding/schema</code></td><td>Question wording + scale bounds, so copy lives in one place</td></tr>
+  <tr><td><code>PATCH /api/me</code></td><td>Display name, avatar, theme (validated)</td></tr>
+  <tr><td><code>POST /api/me/onboarding</code></td><td>Questionnaire answers; marks setup complete</td></tr>
+</table>
+<p>
+Everything under <code>/api/sessions</code> and <code>/api/analysis</code> now sits behind <code>requireAuth</code>
+and is scoped to <code>req.user.id</code>. The client treats 401 as "not signed in" rather than an error
+(<code>ApiError.status</code> in <code>api.ts</code>), and the route guard bounces to <code>/login</code>.
+</p>
+<p>Storage is a flat JSON file (<code>server/data/sessions.json</code>) via <code>db.js</code>. There is no locking — fine for a single local user, replace with a real DB for production (see §8).</p>
+
+<h2>5. The Blink-Detection Pipeline (most important code)</h2>
+<p>Everything lives in <code>client/src/hooks/useBlinkTracker.ts</code>. Read this file first.</p>
+<ul>
+  <li><strong>Model:</strong> MediaPipe Face Landmarker (face_landmarker.task, float16) + WASM, both loaded from CDN at runtime. Delegate selection: <strong>CPU first on mobile</strong> user agents (mobile WebGL proved unstable), GPU first on desktop, with fallback either way.</li>
+  <li><strong>EAR (Eye Aspect Ratio):</strong> classic 6-landmark formula per eye — (‖p2−p6‖ + ‖p3−p4‖) / (2·‖p1−p4‖). Landmark indices: left <code>[362,385,387,263,373,380]</code>, right <code>[33,160,158,133,153,144]</code>. <strong>Lower EAR = more closed.</strong></li>
+  <li><strong>Adaptive baseline (critical):</strong> absolute EAR varies hugely by device, face and distance (one tester's open eyes sat at ~0.15–0.18 while blinks hit ~0.01). Therefore the hook keeps an exponentially smoothed "eyes-open" baseline (<code>baselineEarRef</code>, factor 0.88/0.12, updated only while eyes look open) and detects blinks <em>relative</em> to it: closed when <code>min(earL, earR) &lt; 0.5 × baseline</code> or blendshape blink score &gt; 0.54; open again when EAR recovers toward baseline (several OR'd conditions, because blendshapes lag on phones). <span class="warn" style="display:block">Do not replace this with fixed EAR thresholds — that exact bug already happened once and broke mobile counting entirely.</span></li>
+  <li><strong>Debounce:</strong> blinks ignored in the first 350 ms of a session and within 100 ms of the previous blink.</li>
+  <li><strong>Timestamps:</strong> <code>detectForVideo</code> must get strictly increasing timestamps; the hook derives them from <code>video.currentTime</code> and clamps with <code>lastMpTsRef</code>.</li>
+</ul>
+
+<h2>5b. The Dry-Eye Analysis Engine (home page)</h2>
+<p>
+The home page leads with an <strong>AI dry-eye analysis</strong> card instead of the old 7-day status list.
+The scoring lives entirely in <code>server/analysis.js</code> (pure functions, no I/O) and is served by
+<code>GET /api/analysis</code>; <code>client/src/components/AiAnalysisCard.tsx</code> only renders the verdict.
+Unit tests: <code>server/analysis.test.mjs</code>, run with <code>npm test --prefix server</code>.
+</p>
+<p>
+It is a <strong>deterministic, explainable rule model</strong> — not a trained classifier. With a few hundred
+samples from a handful of devices there is nothing to fit, and the user needs to see <em>why</em> the number moved.
+Each factor produces a 0-1 sub-score; the final 0-100 risk index is the weighted mean of the factors that had
+enough data, so unavailable factors drop out and the rest are re-normalised.
+</p>
+<table>
+  <tr><th style="width:34%">Factor</th><th style="width:10%">Weight</th><th>What it measures</th></tr>
+  <tr><td>Average blink rate</td><td>34%</td><td>Duration-weighted mean blinks/min. ≥15 healthy, &lt;7 is the dryness threshold</td></tr>
+  <tr><td>Time in the dryness band</td><td>22%</td><td>Share of monitored time under 7 (and under 10) blinks/min</td></tr>
+  <tr><td>Blink-free staring gaps</td><td>18</td><td>Longest stretch with no blink, plus rate of gaps over 10 s</td></tr>
+  <tr><td>Symptoms you reported</td><td>14</td><td>Onboarding scales: discomfort, strain, reliance on relief, screen exposure</td></tr>
+  <tr><td>Repeat dryness alerts</td><td>10</td><td>Alerts <em>beyond the first</em> per 10 minutes of monitoring</td></tr>
+  <tr><td>Blink decay during sessions</td><td>10</td><td>Least-squares slope of blink rate across a session (fatigue curve)</td></tr>
+  <tr><td>Trend vs earlier sessions</td><td>6</td><td>Recent half of the window against the earlier half</td></tr>
+</table>
+<p>
+Weights are relative, not percentages — the score is the weighted mean over whichever factors had data.
+The self-report factor deliberately sits below the measured blink rate: symptoms are the half of dry eye a
+camera cannot see, but self-reports drift while the measurements move day to day. When symptoms are high and
+the measured blink rate is fine, the engine says so — that pattern points at evaporation or tear quality
+rather than blink frequency, and is the most clinically useful thing this model produces.
+</p>
+<p>Bands: &lt;20 Low · &lt;40 Mild · &lt;65 Moderate · ≥65 High. Confidence comes from session count and total monitored minutes.</p>
+<div class="warn">
+  Three quirks of the stored data drive the guard rails — read these before touching the weights.
+  <ol style="margin-bottom:0">
+    <li><code>SamplePoint.bpm</code> counts blinks in the <strong>trailing 60 s</strong>, so every sample before
+      <code>t = 60 s</code> reads low by construction. Exposure and decay factors skip them.</li>
+    <li><code>avgBlinksPerMin</code> is <code>blinkCount / elapsed minutes</code> — unbiased at any duration — so it
+      carries the heaviest weight.</li>
+    <li>Because of (1), almost every session logs one dryness alert in its first minute. Only <em>excess</em> alerts
+      on sessions ≥ 90 s count.</li>
+  </ol>
+</div>
+<p>
+Captures under 15 s or with fewer than 3 samples are discarded as noise (the store already contains several 0-3 s
+aborted captures); the card reports how many were skipped. If the window holds no usable session the engine falls
+back to the most recent usable captures, and if there are none at all it returns an
+<code>insufficient_data</code> state with a "run a capture" call to action.
+</p>
+
+<h2>5c. Accounts, Sign-in and Onboarding</h2>
+<h3>5c.1 How sign-in works</h3>
+<ol>
+  <li><code>Login.tsx</code> fetches <code>/api/auth/config</code>, loads Google Identity Services from Google's CDN
+    (with <code>?hl=en</code> so the button matches the English UI) and renders the official button. No client ID
+    configured → the page explains how to create one instead of failing silently.</li>
+  <li>Google returns an <strong>ID token</strong> in the callback. The browser POSTs it to <code>/api/auth/google</code>.</li>
+  <li><code>auth.js → verifyGoogleIdToken()</code> validates it with <code>google-auth-library</code> (signature, expiry,
+    and audience = our client ID). Nothing the browser claims is trusted; the Google credential itself is never stored.</li>
+  <li>The server upserts the account (keyed on Google's <code>sub</code>) and sets <code>pipo_session</code>:
+    HttpOnly, SameSite=Lax, Secure only over HTTPS, 30 days, value = <code>base64url(payload).HMAC-SHA256</code>
+    verified with <code>timingSafeEqual</code>.</li>
+</ol>
+<div class="note">
+  <strong>The dev login is a seam, not a back door.</strong> <code>POST /api/auth/dev-login</code> answers 404 unless
+  <code>PIPO_ALLOW_DEV_LOGIN=1</code> <em>and</em> <code>NODE_ENV !== "production"</code>. It exists so the app can be
+  demoed without a Google Cloud project. Keep both conditions if you touch that code.
+</div>
+
+<h3>5c.2 Onboarding</h3>
+<p>
+Three steps in <code>Onboarding.tsx</code> — profile (name + photo), appearance (light/dark, previewed live), and four
+1-5 statements plus a primary reason. The wording lives server-side in <code>onboarding.js</code> and is fetched via
+<code>GET /api/onboarding/schema</code>, so the questions, their validation and the scoring all read from one definition.
+<code>RequireAccount</code> in <code>App.tsx</code> keeps unfinished accounts on <code>/welcome</code>; Settings links back
+with <code>?redo=1</code> to edit the answers later.
+</p>
+<p>
+Avatars are cropped square and downscaled to 256&nbsp;px JPEG in the browser (<code>lib/avatar.ts</code>) before upload —
+they are stored as data URLs inside <code>users.json</code>, so unbounded images would bloat the store. The server
+additionally rejects anything that is not an <code>https</code> URL or an image data URL, and caps it at 2&nbsp;MB.
+</p>
+
+<h3>5c.3 Existing history</h3>
+<p>
+Sessions recorded before accounts existed have no <code>userId</code>. <code>claimLegacySessions()</code> gives them to the
+<strong>first</strong> account created on an install, so an upgraded folder keeps its history. Every later account starts
+empty. This runs once and is invisible afterwards — if you are testing sign-in against real data, remember that creating a
+throwaway account first will consume that migration.
+</p>
+
+<h2>5d. Responsive Layout</h2>
+<p>
+Two shapes, one codebase. All breakpoints live in <code>client/src/index.css</code> — no JavaScript media queries, and
+both navigations are always mounted so the visible one is purely a CSS decision (<code>Layout.tsx</code>).
+</p>
+<table>
+  <tr><th style="width:26%">Width</th><th>Layout</th></tr>
+  <tr><td>&lt; 768px (phones)</td><td>Single column capped at 480px, fixed bottom tab bar, avatar in the page header as the account shortcut, 2-across metric tiles</td></tr>
+  <tr><td>≥ 768px (tablet, desktop)</td><td>Sticky 248px sidebar with account + sign out, bottom bar hidden, content to 820px, 4-across tiles, taller charts, 2-column history grid</td></tr>
+  <tr><td>≥ 1200px (wide desktop)</td><td>Content to 1040px, 3-column history grid, and <code>.split</code> sections (Home, Monitor) become two columns</td></tr>
+</table>
+<p>
+Reusable classes rather than per-page inline styles: <code>.split</code>, <code>.stat-grid</code>, <code>.card-grid</code>,
+<code>.chart-box</code> (Recharts needs a pixel height on its wrapper, so its breakpoints live in CSS too). When adding a
+page, reach for these before writing a new grid.
+</p>
+
+<h2>5e. The Dryness Alert</h2>
+<p>
+Lifecycle lives in <code>Monitor.tsx</code>; <code>DrynessModal.tsx</code> is presentational.
+Constants at the top of Monitor: <code>BLINKS_TO_CLEAR</code> 5, <code>REMINDER_MS</code> 8s,
+<code>SUPPRESS_MS</code> 50s, <code>LOW_FOR_MS</code> 7s.
+</p>
+<ol>
+  <li>Rolling rate under 7/min for <code>LOW_FOR_MS</code> → <code>openDryness()</code>. It records
+    <code>alertBaselineRef = blinkCount</code>, chimes, fires the notification and starts the reminder interval.</li>
+  <li>An effect on <code>tracker.blinkCount</code> computes <code>blinkCount − baseline</code> and clears the alert
+    at <code>BLINKS_TO_CLEAR</code>. <strong>There is no acknowledge button</strong> — blinking is the only
+    normal way out, which is the whole point of the mechanic.</li>
+  <li>While the alert is open <em>and</em> <code>document.hidden</code>, the interval re-fires the notification
+    (same <code>tag</code> + <code>renotify</code> so it replaces rather than stacks, <code>requireInteraction</code>
+    so it persists) with a chime, showing live progress. Returning to the tab closes the OS notification and lets
+    the modal take over.</li>
+</ol>
+<div class="note">
+  <strong>Audio must be unlocked by a gesture.</strong> <code>unlockAlertSound()</code> is called from the
+  Start capture click. Chimes fire minutes later with no gesture anywhere near them, and a cold
+  <code>AudioContext</code> is blocked by autoplay policy. The chime itself is synthesised
+  (<code>lib/alertSound.ts</code>) — no asset, works offline. Users can mute it in Settings.
+</div>
+<div class="warn">
+  <strong>Background detection is best-effort.</strong> <code>useBlinkTracker.schedule()</code> falls back from
+  <code>requestAnimationFrame</code> (which never fires in a hidden tab) to a 200&nbsp;ms timer, so the pipeline
+  survives being backgrounded — verified: ~55&nbsp;fps via rAF when visible, timer-driven when hidden, rAF again on
+  return. But browsers clamp hidden-tab timers to about 1&nbsp;Hz, far below what a 100-400&nbsp;ms blink needs, so
+  blinks may not register until the tab is visible again. The alert keeps nagging rather than clearing early, which
+  is the failure mode you want. True full-rate background counting needs frames pulled off the
+  <code>MediaStreamTrack</code> (<code>MediaStreamTrackProcessor</code>, Chromium-only) or an AudioWorklet clock,
+  rather than reading the <code>&lt;video&gt;</code> element from a throttled timer.
+</div>
+<p>
+A dismiss link appears after 20&nbsp;s (<code>ESCAPE_AFTER_MS</code> in the modal). Do not remove it: the overlay
+covers the Stop button, so without it a user whose face has left the frame is trapped with no way to end the session.
+</p>
+<p>
+Note <code>alertsTriggered</code> now counts alerts <em>fired</em> rather than alerts acknowledged, which is what the
+field name always implied and what <code>analysis.js</code>'s alert-burden factor assumes.
+</p>
+
+<h2>5f. The Chrome Extension</h2>
+<p>
+A second build target from the same source: <code>client/vite.extension.config.ts</code> →
+<code>client/dist-extension/</code>, which is the folder you load unpacked and the folder you zip for the
+Web Store. Run it with <code>npm run build:ext --prefix client</code>. Sources live in
+<code>client/extension/</code>.
+</p>
+<table>
+  <tr><th style="width:26%">Concern</th><th>Web app</th><th>Extension</th></tr>
+  <tr><td>Data layer</td><td><code>src/api.ts</code> (REST)</td><td><code>extension/src/data/localData.ts</code> (chrome.storage.local)</td></tr>
+  <tr><td>Accounts</td><td>Google sign-in</td><td>None — a local profile, no login page</td></tr>
+  <tr><td>Analysis</td><td>Server-side</td><td>In the page, same <code>shared/analysis.js</code></td></tr>
+  <tr><td>MediaPipe assets</td><td>Google CDN</td><td>Packaged under <code>extension/public/</code></td></tr>
+  <tr><td>Notifications</td><td><code>window.Notification</code></td><td><code>chrome.notifications</code> via the service worker</td></tr>
+  <tr><td>Navigation</td><td>Bottom bar / sidebar</td><td><code>Shell.tsx</code> tab strip (works at 360px and full width)</td></tr>
+</table>
+<h3>5f.1 How the sharing works</h3>
+<p>
+Monitor, History, SessionDetail, Insights and AiAnalysisCard are used by <em>both</em> builds unchanged.
+They import their data layer as the bare specifier <code>"@data"</code>, and each Vite config aliases it to
+the right implementation. That is the whole seam — when adding a page, import <code>"@data"</code> rather
+than <code>"../api"</code> and it will work in both targets. Two other swappable pieces follow the same
+pattern: <code>lib/visionAssets.ts</code> (where MediaPipe loads from) and <code>lib/notify.ts</code>
+(who shows the OS alert).
+</p>
+<div class="warn">
+  <strong>MV3 forbids remotely-hosted code.</strong> The old CDN URLs would fail the extension CSP and
+  get the listing rejected, so the runtime and the model ship inside the package. The ≈19&nbsp;MB WASM is
+  copied out of <code>node_modules/@mediapipe/tasks-vision/wasm</code> by a build plugin rather than
+  committed, so upgrading the dependency can never leave a stale runtime behind; the ≈3.7&nbsp;MB
+  <code>face_landmarker.task</code> is committed under <code>extension/public/models/</code> because it is
+  not an npm artefact and downloading it at build time would make builds need the network. Verified:
+  loading the panel issues <em>zero</em> external requests, so the extension also works fully offline.
+</div>
+<h3>5f.2 Why monitoring lives in the panel</h3>
+<p>
+An MV3 service worker has no DOM, so it cannot hold <code>getUserMedia</code>. Capture therefore runs in
+the panel document, which means <strong>closing the side panel ends the session</strong>. The obvious
+alternative — an offscreen document — would move detection back into a permanently hidden context, i.e.
+straight into the throttling described in §5e. The panel is visible while you browse, so
+<code>requestAnimationFrame</code> runs at full rate, which is exactly what blink detection needs. The
+header carries a <strong>Tab</strong> button for the full-window version.
+</p>
+<div class="warn">
+  <strong>Chrome will not show a camera prompt inside a side panel.</strong> Confirmed in the field:
+  <code>getUserMedia</code> rejects with <code>NotAllowedError</code> and no bubble ever appears, so the
+  generic "tap the lock icon" copy was actively misleading — there is no lock icon to tap. Permission is
+  stored per extension origin, so the fix is to grant once from a normal tab.
+  <code>lib/cameraRecovery.ts</code> is the seam: the extension registers a recovery action (open
+  <code>panel.html?surface=tab#/monitor</code>), the web app registers none, and Monitor renders whatever
+  it gets. It fires <em>pre-emptively</em> too — Monitor queries
+  <code>navigator.permissions.query({name:"camera"})</code> on mount, so a panel whose state is
+  <code>prompt</code> or <code>denied</code> shows the way out before the user clicks anything. The
+  <code>?surface=tab</code> marker is what tells a document it is somewhere a prompt can appear; without
+  it the tab would sit there offering to open another tab.
+</div>
+<p>
+Icons are generated, not hand-drawn — see the generator note in the README history; they are committed
+under <code>extension/public/icons/</code>. <code>manifest.json</code> is copied into the build by a
+small plugin because nothing imports it.
+</p>
+
+<div class="pagebreak"></div>
+
+<h2>6. Running the Project</h2>
+<h3>6.1 First-time setup</h3>
+<pre>
+npm install                  # root (concurrently)
+npm install --prefix server
+npm install --prefix client
+</pre>
+
+<h3>6.2 Development (recommended for phone testing)</h3>
+<pre>
+npm run dev
+# Desktop:  https://localhost:5173   (accept the self-signed cert warning once)
+# Phone:    https://&lt;PC-LAN-IP&gt;:5173 (same Wi-Fi; Vite prints the "Network" URL)
+</pre>
+<div class="note">Camera access on phones requires a <strong>secure context</strong>. That is why the dev server runs HTTPS with a self-signed certificate. On the phone, tap Advanced → Proceed once. Plain <code>http://192.168.x.x</code> will silently block the camera with no permission prompt.</div>
+
+<h3>6.3 Production mode (single port)</h3>
+<pre>
+npm run build --prefix client
+$env:NODE_ENV = "production"          # PowerShell (use NODE_ENV=... on macOS/Linux)
+npm run start --prefix server
+# Open http://localhost:3001
+</pre>
+<div class="warn">Production mode is plain HTTP, so phone cameras will be blocked on LAN IPs. For real deployment put the app behind genuine HTTPS (host, reverse proxy, or tunnel).</div>
+
+<h3>6.4 Useful facts</h3>
+<ul>
+  <li>Server port: <code>PORT</code> env (default 3001). Bind address: <code>HOST</code> env (default 0.0.0.0).</li>
+  <li>Reset all history: delete <code>server/data/sessions.json</code>.</li>
+  <li>Windows Firewall must allow inbound TCP 5173 + 3001 for LAN access.</li>
+  <li>First monitoring run needs internet (CDN model download, ~3–4 MB).</li>
+</ul>
+
+<h2>7. Known Issues &amp; Limitations</h2>
+<table>
+  <tr><th style="width:34%">Issue</th><th>Detail / suggested direction</th></tr>
+  <tr><td>Threshold tuning is heuristic</td><td>Blink thresholds (0.5× baseline, blend 0.54, open conditions) were tuned on limited devices. Gather more test data; consider logging EAR streams for offline analysis.</td></tr>
+  <tr><td>JSON file storage</td><td>Accounts exist now, but storage is still flat files with no locking — concurrent writes can clobber each other. Move to SQLite/Postgres before more than one person uses an install.</td></tr>
+  <tr><td>Session secret</td><td>Auto-generated into <code>server/data/.session-secret</code> when <code>SESSION_SECRET</code> is unset. Convenient locally, wrong for a deployment — set it explicitly and keep it out of git (already in <code>.gitignore</code>).</td></tr>
+  <tr><td>Avatars inside users.json</td><td>Data URLs in the same file as the accounts. Fine for a handful of users; move to file/object storage if this grows.</td></tr>
+  <tr><td>No account deletion</td><td>There is no "delete my account" flow, which a real deployment handling Google profile data would need.</td></tr>
+  <tr><td>Self-signed cert UX</td><td>Clients must click through a browser warning in dev. Real deployment needs proper TLS.</td></tr>
+  <tr><td>Google sign-in cannot use a LAN IP</td><td>Google rejects bare IPs as authorised JavaScript origins ("must end with a public top-level domain"), so <code>https://192.168.x.x:5173</code> can never host sign-in. Phone testing needs a tunnel (public hostname + valid cert), a wildcard-DNS name like <code>192-168-1-5.nip.io</code>, or the dev login. README → "Testing on a phone". Deploying properly (roadmap item 1) removes the problem.</td></tr>
+  <tr><td>Model loaded from CDN</td><td>Offline use fails. Consider self-hosting the .task model + WASM in <code>client/public</code>.</td></tr>
+  <tr><td>Bundle size warning (~730 kB)</td><td>Mostly Recharts + MediaPipe glue. Code-split routes or lazy-load charts if it matters.</td></tr>
+  <tr><td>Settings rows are placeholders</td><td>Privacy Policy / Data Permissions / Help / About open simple alerts — need real content pages.</td></tr>
+  <tr><td>No session deletion in UI</td><td>API supports DELETE; History page has no delete button yet.</td></tr>
+  <tr><td>Tab switch / screen lock during session</td><td>rAF throttling pauses detection in background tabs; behavior unverified. Consider visibilitychange handling.</td></tr>
+  <tr><td>Not a medical device</td><td>Keep wellness disclaimers (already in Settings → About) in any public release.</td></tr>
+</table>
+
+<h2>8. Suggested Roadmap</h2>
+<ol>
+  <li><strong>Deploy</strong> to a Node-capable host (Railway / Render / Fly.io) with real HTTPS — unblocks mobile camera without cert warnings.</li>
+  <li><strong>Database</strong> — accounts are done (§5c); the remaining half is moving <code>sessions.json</code> /
+    <code>users.json</code> onto SQLite (better-sqlite3 or Prisma) so concurrent writes are safe, plus an account-deletion flow.</li>
+  <li><strong>Calibration step</strong> — 3-second "look at the camera" warm-up to lock the EAR baseline before counting.</li>
+  <li><strong>PWA</strong> — manifest + service worker so users can install it and self-host the model for offline.</li>
+  <li><strong>Smarter insights</strong> — the §5b analysis engine covers the server-side aggregate; still open are trend
+    notifications ("your blink rate dropped this week") and calibrating the weights against real dry-eye questionnaires
+    (OSDI/DEQ-5) once there is labelled data.</li>
+  <li><strong>Session management UI</strong> — delete/annotate sessions, export CSV.</li>
+</ol>
+
+<h2>9. Quick Orientation for New Developers</h2>
+<ul>
+  <li>Start with <code>PIPO_ALLOW_DEV_LOGIN=1 npm run dev</code> — that gets you past the login page without a Google
+    project — then click through onboarding and all five tabs at both a phone and a desktop window width.</li>
+  <li>Read <code>client/src/hooks/useBlinkTracker.ts</code> (detection core) and <code>client/src/pages/Monitor.tsx</code> (session lifecycle + alert logic). Those two files contain ~80% of the product's complexity.</li>
+  <li>The backend is still small — <code>server/index.js</code> is routing and validation only; the substance lives in
+    <code>analysis.js</code> (scoring), <code>auth.js</code> (sign-in) and <code>db.js</code> (storage).</li>
+  <li>Design tokens (colors, radii, shadows, dark mode) <em>and</em> every responsive breakpoint are in
+    <code>client/src/index.css</code>. Reuse <code>.split</code> / <code>.stat-grid</code> / <code>.card-grid</code> /
+    <code>.chart-box</code> rather than adding inline grids.</li>
+  <li>Run <code>npm test</code> after touching the scoring rules — 19 cases cover the factors and the
+    data quirks they guard against.</li>
+  <li>Commit and push every change (§0). The handoff you are reading lives in the repo, so keep it current.</li>
+  <li>All shared types and the blink-rate→status mapping live in <code>client/src/types.ts</code>.</li>
+</ul>
+
+<p class="meta" style="margin-top:28px">Pipo Care · Developer Handoff · Generated June 11, 2026 · Wellness prototype — not a medical device.</p>
+
+</body>
+</html>

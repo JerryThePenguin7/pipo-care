@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import type { EyeStatus, SamplePoint } from "../types";
 import { statusFromBpm } from "../types";
+import { visionAssets } from "../lib/visionAssets";
 
 /** MediaPipe Face Landmarker topology — six points per eye for EAR. */
 const LEFT_EYE = [362, 385, 387, 263, 373, 380];
@@ -56,6 +57,10 @@ export function useBlinkTracker() {
 
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const rafRef = useRef<number | null>(null);
+  /** Timer handle used instead of rAF while the tab is hidden (see schedule()). */
+  const timerRef = useRef<number | null>(null);
+  /** Lets schedule() call the current tick without a declaration cycle. */
+  const tickRef = useRef<() => void>(() => {});
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sessionStartRef = useRef<number>(0);
   const blinkTimesRef = useRef<number[]>([]);
@@ -81,10 +86,9 @@ export function useBlinkTracker() {
     if (landmarkerRef.current) return;
     setError(null);
     try {
-      const wasm = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm";
-      const fileset = await FilesetResolver.forVisionTasks(wasm);
-      const modelUrl =
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+      // CDN for the web app, packaged files for the extension — see lib/visionAssets.
+      const { wasmBase, modelUrl } = visionAssets();
+      const fileset = await FilesetResolver.forVisionTasks(wasmBase);
 
       const tryCreate = async (delegate: "GPU" | "CPU") =>
         FaceLandmarker.createFromOptions(fileset, {
@@ -132,6 +136,41 @@ export function useBlinkTracker() {
     });
   }, []);
 
+  const cancelScheduled = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Queue the next detection pass.
+   *
+   * requestAnimationFrame never fires while a tab is hidden, which used to stop blink
+   * counting dead the moment the user switched away. The dryness alert now clears only
+   * when it counts real blinks, so the loop has to survive being backgrounded: when the
+   * document is hidden we fall back to a timer.
+   *
+   * Caveat worth knowing before relying on it — browsers clamp timers in hidden tabs to
+   * roughly 1 Hz, far below the ~30 Hz a blink (100-400 ms) needs to be caught reliably.
+   * Detection therefore degrades rather than stops: some blinks land, most are missed
+   * until the tab is visible again. Full-rate background capture would need the frames
+   * pulled off the MediaStreamTrack in a worker instead of read from the video element.
+   */
+  const schedule = useCallback(() => {
+    if (!sessionActiveRef.current) return;
+    cancelScheduled();
+    if (typeof document !== "undefined" && document.hidden) {
+      timerRef.current = window.setTimeout(() => tickRef.current(), 200);
+    } else {
+      rafRef.current = requestAnimationFrame(() => tickRef.current());
+    }
+  }, [cancelScheduled]);
+
   const tick = useCallback(() => {
     if (!sessionActiveRef.current) return;
 
@@ -140,7 +179,7 @@ export function useBlinkTracker() {
     if (!lm) return;
 
     if (!video || video.readyState < 2 || !video.videoWidth) {
-      if (sessionActiveRef.current) rafRef.current = requestAnimationFrame(tick);
+      schedule();
       return;
     }
 
@@ -154,7 +193,7 @@ export function useBlinkTracker() {
     try {
       result = lm.detectForVideo(video, ts);
     } catch {
-      if (sessionActiveRef.current) rafRef.current = requestAnimationFrame(tick);
+      schedule();
       return;
     }
 
@@ -226,8 +265,22 @@ export function useBlinkTracker() {
       }
     }
 
-    if (sessionActiveRef.current) rafRef.current = requestAnimationFrame(tick);
-  }, [pushSample]);
+    schedule();
+  }, [pushSample, schedule]);
+
+  // schedule() reaches tick through this ref, so neither has to depend on the other.
+  useEffect(() => {
+    tickRef.current = tick;
+  }, [tick]);
+
+  /** Hidden and visible use different schedulers, so re-queue when visibility flips. */
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (sessionActiveRef.current) schedule();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [schedule]);
 
   const start = useCallback(
     async (video: HTMLVideoElement) => {
@@ -253,18 +306,14 @@ export function useBlinkTracker() {
       setIsRunning(true);
       sessionActiveRef.current = true;
 
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(tick);
+      schedule();
     },
-    [initLandmarker, tick]
+    [initLandmarker, schedule]
   );
 
   const stop = useCallback((): TrackerSnapshot | null => {
     sessionActiveRef.current = false;
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
+    cancelScheduled();
     setIsRunning(false);
     const lm = landmarkerRef.current;
     const video = videoRef.current;

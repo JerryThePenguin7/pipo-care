@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchAnalysis } from "../api";
+import { fetchAnalysis } from "@data";
 import type { AnalysisFinding, DryEyeAnalysis, RiskLevel } from "../types";
 
 /**
- * Home-page read-out of the dry-eye analysis engine (server/analysis.js).
- * The scoring lives on the server; this component only renders the verdict,
- * the evidence behind it and what to do about it.
+ * Home-page read-out of the dry-eye analysis engine (shared/analysis.js).
+ * This component only renders the verdict, the evidence behind it and what to do — the
+ * scoring runs on the server in the web app and in the page in the Chrome extension.
  */
 
 const LEVEL_COLOR: Record<RiskLevel, string> = {
@@ -142,7 +142,7 @@ export function AiAnalysisCard() {
     setError(null);
     fetchAnalysis()
       .then(setAnalysis)
-      .catch(() => setError("Could not reach the analysis service. Check that the Pipo Care server is running."))
+      .catch(() => setError("Could not run the dry-eye analysis just now."))
       .finally(() => setLoading(false));
   }, []);
 
